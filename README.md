@@ -1,6 +1,6 @@
 # Jupytext Support for Obsidian
 
-Creates and syncs Jupyter Notebooks from markdown notes through Jupytext in Obsidian.
+Creates and syncs Jupyter Notebooks from markdown notes through Jupytext.
 
 ![plugin.gif](assets/plugin.gif)
 
@@ -15,11 +15,11 @@ Creates and syncs Jupyter Notebooks from markdown notes through Jupytext in Obsi
 
 ## Features
 
-`Jupytext Support for Obsidian: Create Jupyter Notebook from Note`
+`Jupytext Support: Create Jupyter Notebook from Note`
 
 - Creates Jupyter Notebook from current file
 - Syncs markdown and notebook files when either file is saved
 
-`Jupytext Support for Obsidian: Open Jupyter Notebook in VS Code`
+`Jupytext Support: Open Jupyter Notebook in VS Code`
 
 - Opens current file in VS Code if Jupyter Notebook version exists

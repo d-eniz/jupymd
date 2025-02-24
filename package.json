@@ -1,7 +1,7 @@
 {
-	"name": "jupytext-obsidian-plugin",
-	"version": "1.0.0",
-	"description": "Sync Obsidian Markdown notes with Jupyter Notebooks using Jupytext.",
+	"name": "jupytext-support",
+	"version": "1.0.2",
+	"description": "Creates and syncs Jupyter Notebooks from markdown notes through Jupytext.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
