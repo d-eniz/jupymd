@@ -7,7 +7,7 @@ import {
 } from "obsidian";
 import { exec } from "child_process";
 import * as path from "path";
-import * as yaml from "yaml";
+import { promises as fs } from "fs";
 
 export default class JupytextPlugin extends Plugin {
 	async onload() {
@@ -46,13 +46,15 @@ export default class JupytextPlugin extends Plugin {
 
 	// Check if the Markdown file is paired with a Jupyter Notebook
 	async isNotebookPaired(file: TFile): Promise<boolean> {
-		const content = await this.app.vault.read(file);
-		const yamlFrontMatter = content.match(/^---\n([\s\S]*?)\n---/);
-		if (yamlFrontMatter) {
-			const metadata = yaml.parse(yamlFrontMatter[1]);
-			return !!metadata?.jupyter;
+		const mdPath = this.getAbsolutePath(file);
+		const ipynbPath = mdPath.replace(/\.md$/, ".ipynb");
+
+		try {
+			await fs.access(ipynbPath, fs.constants.F_OK);
+			return true;
+		} catch (error) {
+			return false;
 		}
-		return false;
 	}
 
 	// Command to create a Jupyter Notebook from the active note
