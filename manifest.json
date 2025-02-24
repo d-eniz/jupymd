@@ -3,7 +3,7 @@
 	"name": "Jupytext Support",
 	"version": "1.0.2",
 	"minAppVersion": "0.15.0",
-	"description": "",
+	"description": "Creates and syncs Jupyter Notebooks from markdown notes through Jupytext.",
 	"author": "Deniz Terzioglu",
 	"authorUrl": "https://d-eniz.github.io/",
 	"isDesktopOnly": false
