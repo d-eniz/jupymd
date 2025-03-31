@@ -1,7 +1,7 @@
 {
-	"name": "jupytext-support",
-	"version": "1.0.2",
-	"description": "Creates and syncs Jupyter Notebooks from markdown notes through Jupytext.",
+	"name": "jupymd",
+	"version": "1.1",
+	"description": "Link and sync Markdown notes with Jupyter notebooks via Jupytext.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
@@ -16,7 +16,7 @@
 		"markdown",
 		"sync"
 	],
-	"author": "Your Name <your.email@example.com>",
+	"author": "Deniz Terzioglu",
 	"license": "MIT",
 	"devDependencies": {
 		"@types/node": "^18.0.0",

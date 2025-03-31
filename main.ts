@@ -8,7 +8,6 @@ import {
 import { exec } from "child_process";
 import * as path from "path";
 import { promises as fs } from "fs";
-import { error } from "console";
 
 export default class JupytextPlugin extends Plugin {
 	async onload() {

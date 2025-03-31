@@ -1,4 +1,4 @@
-# Jupytext Support for Obsidian
+# JupyMD for Obsidian
 
 Creates and syncs Jupyter Notebooks from markdown notes through Jupytext.
 
@@ -17,11 +17,15 @@ Creates and syncs Jupyter Notebooks from markdown notes through Jupytext.
 
 ## Features
 
-`Jupytext Support: Create Jupyter Notebook from Note`
+`JupyMD: Create Jupyter Notebook from Note`
 
 - Creates Jupyter Notebook from current file
 - Syncs markdown and notebook files when either file is saved
 
-`Jupytext Support: Open Jupyter Notebook in VS Code`
+`JupyMD: Open Jupyter Notebook in VS Code`
 
 - Opens current file in VS Code if Jupyter Notebook version exists
+
+`JupyMD: Open Jupyter Notebook in Jupyter Lab`
+
+- Opens current file in Jupyter Lab if Jupyter Notebook version exists
