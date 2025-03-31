@@ -8,6 +8,7 @@ import {
 import { exec } from "child_process";
 import * as path from "path";
 import { promises as fs } from "fs";
+import { error } from "console";
 
 export default class JupytextPlugin extends Plugin {
 	async onload() {
@@ -22,7 +23,14 @@ export default class JupytextPlugin extends Plugin {
 		this.addCommand({
 			id: "open-jupyter-notebook-in-vscode",
 			name: "Open Jupyter Notebook in VS Code",
-			callback: () => this.openNotebookInVSCode(),
+			callback: () => this.openNotebookInEditor("vscode"),
+		});
+
+		// Command to open the paired Jupyter Notebook in Jupyter Lab
+		this.addCommand({
+			id: "open-jupyter-notebook-in-lab",
+			name: "Open Jupyter Notebook in Jupyter Lab",
+			callback: () => this.openNotebookInEditor("jupyter-lab"),
 		});
 
 		// Watch for file changes and sync
@@ -91,8 +99,8 @@ export default class JupytextPlugin extends Plugin {
 		});
 	}
 
-	// Command to open the paired Jupyter Notebook in VS Code
-	async openNotebookInVSCode() {
+	// Command to open the paired Jupyter Notebook in editor
+	async openNotebookInEditor(editor: "vscode" | "jupyter-lab") {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) {
 			new Notice("No active note found.");
@@ -108,15 +116,31 @@ export default class JupytextPlugin extends Plugin {
 		const mdPath = this.getAbsolutePath(activeFile);
 		const ipynbPath = mdPath.replace(/\.md$/, ".ipynb");
 
-		// Open the .ipynb file in VS Code
-		exec(`code "${ipynbPath}"`, (error) => {
+		let command: string;
+		let editorName: string;
+
+		switch (editor) {
+			case "vscode":
+				command = `code "${ipynbPath}"`;
+				editorName = "VS Code"
+				break;
+			case "jupyter-lab":
+				command = `python -m jupyterlab "${ipynbPath}"`;
+				editorName = "Jupyter Lab"
+				break;
+			default:
+				throw new Error(`Unsupported editor: ${editor}`);
+		}
+
+		// Open the .ipynb file in editor
+		exec(command, (error) => {
 			if (error) {
 				new Notice(
-					`Failed to open notebook in VS Code: ${error.message}`
+					`Failed to open notebook in ${editorName}: ${error.message}`
 				);
 				return;
 			}
-			new Notice(`Opened notebook in VS Code: ${ipynbPath}`);
+			new Notice(`Opened notebook in ${editorName}: ${ipynbPath}`);
 		});
 	}
 
