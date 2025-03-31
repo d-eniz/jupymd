@@ -11,6 +11,8 @@ Creates and syncs Jupyter Notebooks from markdown notes through Jupytext.
   `pip install notebook`
 - [Jupytext](https://github.com/mwouts/jupytext)
   `pip install jupytext`
+- (Optional) [Jupyter Lab](https://code.visualstudio.com/)
+  `pip install jupyterlab`
 - (Optional) [Visual Studio Code](https://code.visualstudio.com/)
 
 ## Features
