@@ -14,21 +14,21 @@ export default class JupytextPlugin extends Plugin {
 		// Command to create a Jupyter Notebook from the current note
 		this.addCommand({
 			id: "create-jupyter-notebook",
-			name: "Create Jupyter Notebook from Note",
+			name: "Create Jupyter notebook from note",
 			callback: () => this.createNotebook(),
 		});
 
 		// Command to open the paired Jupyter Notebook in VS Code
 		this.addCommand({
 			id: "open-jupyter-notebook-in-vscode",
-			name: "Open Jupyter Notebook in VS Code",
+			name: "Open Jupyter notebook in VS Code",
 			callback: () => this.openNotebookInEditor("vscode"),
 		});
 
 		// Command to open the paired Jupyter Notebook in Jupyter Lab
 		this.addCommand({
 			id: "open-jupyter-notebook-in-lab",
-			name: "Open Jupyter Notebook in Jupyter Lab",
+			name: "Open Jupyter notebook in Jupyter Lab",
 			callback: () => this.openNotebookInEditor("jupyter-lab"),
 		});
 
