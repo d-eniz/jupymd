@@ -1,40 +1,46 @@
 name: Release Obsidian plugin
 
 on:
-  push:
-    tags:
-      - "*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag version (e.g., v1.2.3)"
-        required: true
+    push:
+        tags:
+            - "*"
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: "Tag version (e.g., 1.2.3)"
+                required: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v3
+    build:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/checkout@v3
 
-      - name: Use Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "18.x"
+            - name: Use Node.js
+              uses: actions/setup-node@v3
+              with:
+                  node-version: "18.x"
 
-      - name: Build plugin
-        run: |
-          npm install
-          npm run build
+            - name: Build plugin
+              run: |
+                  npm install
+                  npm run build
 
-      - name: Create release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          tag="${GITHUB_REF#refs/tags/}"
+            - name: Create release
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+                  tag="${{ github.event.inputs.tag }}"
+                  else
+                  tag="${GITHUB_REF#refs/tags/}"
+                  fi
 
-          gh release create "$tag" \
-            --title="$tag" \
-            --draft \
-            main.js manifest.json
+                  echo "Creating release for tag: $tag"
+
+                  gh release create "$tag" \
+                  --title="$tag" \
+                  --draft \
+                  main.js manifest.json
