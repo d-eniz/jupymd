@@ -8,6 +8,8 @@ import {
 import { exec } from "child_process";
 import * as path from "path";
 import { promises as fs } from "fs";
+import * as os from "os";
+import { Editor, MarkdownView } from "obsidian";
 
 export default class JupytextPlugin extends Plugin {
 	async onload() {
@@ -38,6 +40,14 @@ export default class JupytextPlugin extends Plugin {
 				this.syncFiles(file)
 			)
 		);
+
+		// Command to execute current code block
+		this.addCommand({
+			id: "execute-code-block",
+			name: "Execute code block",
+			editorCallback: (editor: Editor, view: MarkdownView) =>
+				this.executeCodeBlock(editor, view),
+		});
 	}
 
 	// Get the absolute path of a file in the vault
@@ -121,11 +131,11 @@ export default class JupytextPlugin extends Plugin {
 		switch (editor) {
 			case "vscode":
 				command = `code "${ipynbPath}"`;
-				editorName = "VS Code"
+				editorName = "VS Code";
 				break;
 			case "jupyter-lab":
 				command = `python -m jupyterlab "${ipynbPath}"`;
-				editorName = "Jupyter Lab"
+				editorName = "Jupyter Lab";
 				break;
 			default:
 				throw new Error(`Unsupported editor: ${editor}`);
@@ -169,6 +179,106 @@ export default class JupytextPlugin extends Plugin {
 					);
 				}
 			});
+		}
+	}
+
+	private getActiveCodeBlock(
+		editor: Editor
+	): { code: string; startPos: number; endPos: number } | null {
+		const cursor = editor.getCursor();
+		const content = editor.getValue();
+		const lines = content.split("\n");
+
+		let inCodeBlock = false;
+		let codeBlockStart = 0;
+		let codeBlockEnd = 0;
+		const codeBlockContent: string[] = [];
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+
+			if (line.startsWith("```") && !inCodeBlock) {
+				// Start of code block
+				inCodeBlock = true;
+				codeBlockStart = i;
+			} else if (line.startsWith("```") && inCodeBlock) {
+				// End of code block
+				inCodeBlock = false;
+				codeBlockEnd = i;
+
+				// Check if cursor is within this block
+				if (
+					cursor.line >= codeBlockStart &&
+					cursor.line <= codeBlockEnd
+				) {
+					return {
+						code: codeBlockContent.join("\n"),
+						startPos: codeBlockStart,
+						endPos: codeBlockEnd,
+					};
+				}
+			} else if (inCodeBlock) {
+				codeBlockContent.push(line);
+			}
+		}
+
+		return null;
+	}
+
+	private async executeCodeBlock(editor: Editor, view: MarkdownView) {
+		const codeBlock = this.getActiveCodeBlock(editor);
+		if (!codeBlock) {
+			new Notice("No code block found at cursor position");
+			return;
+		}
+
+		const tempDir = os.tmpdir();
+		const tempFilePath = path.join(
+			tempDir,
+			`obsidian_exec_${Date.now()}.py`
+		);
+
+		try {
+			// Write code to temp file
+			await fs.writeFile(tempFilePath, codeBlock.code);
+
+			// Execute with Python directly
+			const command = `python "${tempFilePath}"`;
+
+			const { stdout, stderr } = await new Promise<{
+				stdout: string;
+				stderr: string;
+			}>((resolve, reject) => {
+				exec(command, (error, stdout, stderr) => {
+					if (error) {
+						resolve({ stdout, stderr }); // We still want to capture the error output
+					} else {
+						resolve({ stdout, stderr });
+					}
+				});
+			});
+
+			// Combine outputs
+			const output = [stdout, stderr].filter(Boolean).join("\n").trim();
+
+			// Insert output
+			const outputMarkdown = output
+				? `\n\n${output.includes("Traceback") ? "```error" : "```output"}\n${output}\n\`\`\``
+				: "\n\n```output\n[Execution completed with no output]\n```";
+
+			editor.replaceRange(outputMarkdown, {
+				line: codeBlock.endPos,
+				ch: editor.getLine(codeBlock.endPos).length,
+			});
+		} catch (error) {
+			new Notice(`Execution failed: ${error.message}`);
+		} finally {
+			// Clean up temp file
+			try {
+				await fs.unlink(tempFilePath);
+			} catch {
+				// Intentionally left empty
+			}
 		}
 	}
 }
