@@ -172,22 +172,29 @@ export default class JupytextPlugin extends Plugin {
 
 		if (filePath.endsWith(".md")) {
 			const ipynbPath = filePath.replace(/\.md$/, ".ipynb");
-			exec(`jupytext --sync "${ipynbPath}"`, (error) => {
-				if (error) {
-					console.error(
-						`Failed to sync Markdown file: ${error.message}`
-					);
-				}
-			});
+			if (await this.isNotebookPaired(file)) {
+				exec(`jupytext --sync "${ipynbPath}"`, (error) => {
+					if (error) {
+						console.error(
+							`Failed to sync Markdown file: ${error.message}`
+						);
+					}
+				});
+			}
 		} else if (filePath.endsWith(".ipynb")) {
 			const mdPath = filePath.replace(/\.ipynb$/, ".md");
-			exec(`jupytext --sync "${mdPath}"`, (error) => {
-				if (error) {
-					console.error(
-						`Failed to sync Jupyter Notebook: ${error.message}`
-					);
-				}
-			});
+			const mdFile = this.app.vault.getAbstractFileByPath(
+				path.relative(this.app.vault.getRoot().path, mdPath)
+			);
+			if (mdFile instanceof TFile && (await this.isNotebookPaired(mdFile))) {
+				exec(`jupytext --sync "${mdPath}"`, (error) => {
+					if (error) {
+						console.error(
+							`Failed to sync Jupyter Notebook: ${error.message}`
+						);
+					}
+				});
+			}
 		}
 	}
 
@@ -331,12 +338,13 @@ if plt.get_fignums():
 						text: stdout.split("\n"),
 					});
 
-				if (stderr)
+				if (stderr && stderr.trim()) {
 					cell.outputs.push({
 						output_type: "stream",
 						name: "stderr",
 						text: stderr.split("\n"),
 					});
+				}
 
 				try {
 					await fs.access(plotPath);
@@ -565,7 +573,7 @@ if captured.stderr:
 	async startPythonProcess() {
 		if (this.pythonProcess) return;
 
-		this.pythonProcess = spawn("python", ["-i"], {
+		this.pythonProcess = spawn("python", ["-i", "-q"], {
 			stdio: ["pipe", "pipe", "pipe"],
 		});
 
@@ -614,7 +622,12 @@ if captured.stderr:
 					const stdout = this.stdoutBuffer
 						.split(END_MARKER)[0]
 						.trim();
-					const stderr = this.stderrBuffer.trim();
+
+					// Important: Filter out the >>> prompts from stderr
+					const stderr = this.stderrBuffer
+						.replace(/>>>\s*/g, "") // Remove >>> and any space after it
+						.trim();
+
 					resolve({ stdout, stderr });
 				} else {
 					setTimeout(checkFinished, 50);
@@ -623,14 +636,9 @@ if captured.stderr:
 			checkFinished();
 		});
 	}
-
-	async onunload() {
-		await this.stopPythonProcess();
-	}
 }
 
 /* -TODO-
-- Remove artefacts from outputs
 - Prevent shared memory between files
 	- Maybe make this an option
 - Render output in Obsidian
