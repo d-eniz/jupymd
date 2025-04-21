@@ -4,6 +4,10 @@ import {
 	Notice,
 	TAbstractFile,
 	FileSystemAdapter,
+	PluginSettingTab,
+	App,
+	Setting,
+	Modal,
 } from "obsidian";
 import { exec } from "child_process";
 import * as path from "path";
@@ -12,8 +16,80 @@ import * as os from "os";
 import { Editor, MarkdownView } from "obsidian";
 import { spawn, ChildProcessWithoutNullStreams } from "child_process";
 
+interface JupytextPluginSettings {
+	defaultKernel: string;
+	availableKernels: string[];
+	usePersistentPython: boolean;
+}
+
+const DEFAULT_SETTINGS: JupytextPluginSettings = {
+	defaultKernel: "python3",
+	availableKernels: ["python3"],
+	usePersistentPython: true,
+};
+
+class JupytextSettingTab extends PluginSettingTab {
+	plugin: JupytextPlugin;
+
+	constructor(app: App, plugin: JupytextPlugin) {
+		super(app, plugin);
+		this.plugin = plugin;
+	}
+
+	display(): void {
+		const { containerEl } = this;
+		containerEl.empty();
+
+		containerEl.createEl("h2", { text: "JupyMD Settings" });
+
+		new Setting(containerEl)
+			.setName("Use persistent Python process")
+			.setDesc(
+				"Maintain a running Python process between executions for better performance"
+			)
+			.addToggle((toggle) => {
+				toggle
+					.setValue(this.plugin.settings.usePersistentPython)
+					.onChange(async (value) => {
+						this.plugin.settings.usePersistentPython = value;
+						await this.plugin.saveSettings();
+						if (!value) {
+							await this.plugin.stopPythonProcess();
+						}
+					});
+			});
+
+		new Setting(containerEl)
+			.setName("Default Python kernel")
+			.setDesc("Select the default Python kernel for execution")
+			.addDropdown((dropdown) => {
+				this.plugin.settings.availableKernels.forEach((kernel) => {
+					dropdown.addOption(kernel, kernel);
+				});
+				dropdown.setValue(this.plugin.settings.defaultKernel);
+				dropdown.onChange(async (value) => {
+					this.plugin.settings.defaultKernel = value;
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Detect kernels")
+			.setDesc("Refresh list of available kernels")
+			.addButton((button) => {
+				button.setButtonText("Detect").onClick(async () => {
+					await this.plugin.detectAvailableKernels();
+					this.display(); // Refresh the settings tab
+				});
+			});
+	}
+}
+
 export default class JupytextPlugin extends Plugin {
 	async onload() {
+		await this.loadSettings();
+		this.addSettingTab(new JupytextSettingTab(this.app, this));
+
 		// Command to create a Jupyter Notebook from the current note
 		this.addCommand({
 			id: "create-jupyter-notebook",
@@ -91,9 +167,37 @@ export default class JupytextPlugin extends Plugin {
 			name: "Clear all outputs",
 			callback: () => this.clearAllOutputs(),
 		});
+
+		this.addCommand({
+			id: "select-python-kernel",
+			name: "Select Python kernel",
+			callback: () => this.selectKernel(),
+		});
+
+		this.addCommand({
+			id: "restart-python-kernel",
+			name: "Restart Python kernel",
+			callback: () => this.restartKernel(),
+		});
 	}
 
-	private usePersistentPython = true; // TODO: Actual settings page
+	private currentNotePath: string | null = null;
+
+	settings: JupytextPluginSettings;
+	private pythonProcess: ChildProcessWithoutNullStreams | null = null;
+	private currentKernel: string | null = null;
+
+	async loadSettings() {
+		this.settings = Object.assign(
+			{},
+			DEFAULT_SETTINGS,
+			await this.loadData()
+		);
+	}
+
+	async saveSettings() {
+		await this.saveData(this.settings);
+	}
 
 	// Get the absolute path of a file in the vault
 	getAbsolutePath(file: TFile): string {
@@ -279,7 +383,7 @@ export default class JupytextPlugin extends Plugin {
 		code,
 		cellIndex,
 		ipynbPath,
-		usePersistent = this.usePersistentPython,
+		usePersistent = this.settings.usePersistentPython,
 	}: {
 		code: string;
 		cellIndex: number;
@@ -525,19 +629,29 @@ if captured.stderr:
 	}
 
 	private async executeCodeBlock(editor: Editor, view: MarkdownView) {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile) return;
+
+		const currentPath = this.getAbsolutePath(activeFile);
+		if (this.currentNotePath && this.currentNotePath !== currentPath) {
+			new Notice(
+				"Please restart the kernel before executing code in another note.\nUse the 'Restart Python kernel' command."
+			);
+			return;
+		}
+
+		// Track the current note
+		this.currentNotePath = currentPath;
+
 		const codeBlock = this.getActiveCodeBlock(editor);
 		if (!codeBlock) {
 			new Notice("No code block found at cursor position");
 			return;
 		}
 
-		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) return;
 
-		const ipynbPath = this.getAbsolutePath(activeFile).replace(
-			/\.md$/,
-			".ipynb"
-		);
+		const ipynbPath = currentPath.replace(/\.md$/, ".ipynb");
 		const markdownLines = editor.getValue().split("\n");
 
 		let cellIndex = 0;
@@ -556,7 +670,7 @@ if captured.stderr:
 			code: codeBlock.code,
 			cellIndex,
 			ipynbPath,
-			usePersistent: this.usePersistentPython,
+			usePersistent: this.settings.usePersistentPython,
 		});
 		new Notice("Notebook output updated.");
 	}
@@ -564,6 +678,16 @@ if captured.stderr:
 	private async executeAllCodeBlocks() {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) return;
+
+		const currentPath = this.getAbsolutePath(activeFile);
+		if (this.currentNotePath && this.currentNotePath !== currentPath) {
+			new Notice(
+				"Please restart the kernel before executing code in another note.\nUse the 'Restart Python kernel' command."
+			);
+			return;
+		}
+
+		this.currentNotePath = currentPath;
 
 		const fileContent = await this.app.vault.read(activeFile);
 		const lines = fileContent.split("\n");
@@ -605,12 +729,90 @@ if captured.stderr:
 		new Notice("All code blocks executed.");
 	}
 
-	private pythonProcess: ChildProcessWithoutNullStreams | null = null;
+	async detectAvailableKernels(): Promise<string[]> {
+		return new Promise((resolve) => {
+			exec("jupyter kernelspec list --json", (error, stdout) => {
+				if (error) {
+					console.error("Error detecting kernels:", error);
+					resolve(["python3"]);
+					return;
+				}
+
+				try {
+					const result = JSON.parse(stdout);
+					const kernels = Object.keys(result.kernelspecs);
+					this.settings.availableKernels = kernels;
+					this.saveSettings();
+					resolve(kernels);
+				} catch (e) {
+					console.error("Error parsing kernels:", e);
+					resolve(["python3"]);
+				}
+			});
+		});
+	}
+
+	async selectKernel() {
+		const kernels = await this.detectAvailableKernels();
+
+		new Notice(`Available kernels: ${kernels.join(", ")}`);
+
+		const modal = new (class extends Modal {
+			constructor(
+				app: App,
+				private kernels: string[],
+				private plugin: JupytextPlugin
+			) {
+				super(app);
+			}
+
+			onOpen() {
+				const contentEl = this.modalEl;
+				contentEl.createEl("h2", { text: "Select Python Kernel" });
+
+				this.kernels.forEach((kernel) => {
+					contentEl
+						.createEl("button", {
+							text: kernel,
+							cls: "mod-cta",
+							attr: { style: "margin: 5px;" },
+						})
+						.addEventListener("click", () => {
+							this.plugin.settings.defaultKernel = kernel;
+							this.plugin.saveSettings();
+							new Notice(`Selected kernel: ${kernel}`);
+							this.close();
+						});
+				});
+			}
+
+			onClose() {
+				const { contentEl } = this;
+				contentEl.empty();
+			}
+		})(this.app, kernels, this);
+
+		modal.open();
+	}
+
 	private stdoutBuffer = "";
 	private stderrBuffer = "";
 
 	async startPythonProcess() {
-		if (this.pythonProcess) return;
+		if (
+			this.pythonProcess &&
+			this.currentKernel === this.settings.defaultKernel
+		) {
+			return;
+		}
+
+		if (this.pythonProcess) {
+			await this.stopPythonProcess();
+		}
+
+		this.currentKernel = this.settings.defaultKernel;
+
+		await this.getKernelCommand(this.currentKernel);
 
 		this.pythonProcess = spawn("python", ["-i", "-q"], {
 			stdio: ["pipe", "pipe", "pipe"],
@@ -627,11 +829,45 @@ if captured.stderr:
 		});
 	}
 
+	private async getKernelCommand(kernelName: string): Promise<string> {
+		return new Promise((resolve) => {
+			if (kernelName === "python3") {
+				resolve("python");
+				return;
+			}
+
+			exec(`jupyter kernelspec list --json`, (error, stdout) => {
+				if (error) {
+					resolve("python");
+					return;
+				}
+
+				try {
+					const result = JSON.parse(stdout);
+					const kernelSpec = result.kernelspecs[kernelName];
+					if (
+						kernelSpec &&
+						kernelSpec.spec &&
+						kernelSpec.spec.argv &&
+						kernelSpec.spec.argv.length > 0
+					) {
+						resolve(kernelSpec.spec.argv[0]);
+					} else {
+						resolve("python");
+					}
+				} catch {
+					resolve("python");
+				}
+			});
+		});
+	}
+
 	async stopPythonProcess() {
 		if (this.pythonProcess) {
 			this.pythonProcess.stdin.write("exit()\n");
 			this.pythonProcess.kill();
 			this.pythonProcess = null;
+			this.currentNotePath = null;
 		}
 	}
 
@@ -736,12 +972,16 @@ if captured.stderr:
 			new Notice("Failed to clear outputs");
 		}
 	}
+
+	private async restartKernel() {
+		await this.stopPythonProcess();
+		this.currentNotePath = null;
+		new Notice("Python kernel restarted");
+	}
 }
 
 /* -TODO-
 - Somehow add outputted plots/images to .ipynb
-- Prevent shared memory between files
-	- Maybe make this an option
 - Render output in Obsidian
 - Run button
 */
