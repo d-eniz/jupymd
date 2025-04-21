@@ -48,6 +48,12 @@ export default class JupytextPlugin extends Plugin {
 			editorCallback: (editor: Editor, view: MarkdownView) =>
 				this.executeCodeBlock(editor, view),
 		});
+
+		this.addCommand({
+			id: "execute-all-code-blocks",
+			name: "Execute all code blocks in note",
+			callback: () => this.executeAllCodeBlocks(),
+		});
 	}
 
 	// Get the absolute path of a file in the vault
@@ -182,47 +188,156 @@ export default class JupytextPlugin extends Plugin {
 		}
 	}
 
-	private getActiveCodeBlock(
-		editor: Editor
-	): { code: string; startPos: number; endPos: number } | null {
+	private getActiveCodeBlock(editor: Editor) {
 		const cursor = editor.getCursor();
 		const content = editor.getValue();
 		const lines = content.split("\n");
 
 		let inCodeBlock = false;
-		let codeBlockStart = 0;
-		let codeBlockEnd = 0;
-		const codeBlockContent: string[] = [];
+		let codeBlockStart = -1;
 
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i];
-
-			if (line.startsWith("```") && !inCodeBlock) {
-				// Start of code block
-				inCodeBlock = true;
-				codeBlockStart = i;
-			} else if (line.startsWith("```") && inCodeBlock) {
-				// End of code block
-				inCodeBlock = false;
-				codeBlockEnd = i;
-
-				// Check if cursor is within this block
-				if (
-					cursor.line >= codeBlockStart &&
-					cursor.line <= codeBlockEnd
-				) {
-					return {
-						code: codeBlockContent.join("\n"),
-						startPos: codeBlockStart,
-						endPos: codeBlockEnd,
-					};
+			if (line.trim().startsWith("```")) {
+				if (!inCodeBlock) {
+					inCodeBlock = true;
+					codeBlockStart = i;
+				} else {
+					const codeBlockEnd = i;
+					// Include the cursor being on the backtick lines
+					if (
+						cursor.line >= codeBlockStart &&
+						cursor.line <= codeBlockEnd
+					) {
+						const code = lines
+							.slice(codeBlockStart + 1, codeBlockEnd)
+							.join("\n");
+						return {
+							code,
+							startPos: codeBlockStart,
+							endPos: codeBlockEnd,
+						};
+					}
+					inCodeBlock = false;
 				}
-			} else if (inCodeBlock) {
-				codeBlockContent.push(line);
 			}
 		}
 
 		return null;
+	}
+
+	private async runCodeAndUpdateNotebook({
+		code,
+		cellIndex,
+		ipynbPath,
+	}: {
+		code: string;
+		cellIndex: number;
+		ipynbPath: string;
+	}) {
+		const tempDir = os.tmpdir();
+		const timestamp = Date.now();
+		const userCodePath = path.join(
+			tempDir,
+			`obsidian_user_code_${timestamp}.py`
+		);
+		const scriptPath = path.join(tempDir, `obsidian_exec_${timestamp}.py`);
+		const plotPath = path.join(tempDir, `obsidian_plot_${timestamp}.png`);
+
+		const wrapper = `
+import sys, os
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from IPython.core.interactiveshell import InteractiveShell
+from IPython.utils.capture import capture_output
+
+with open(r"${userCodePath}", "r", encoding="utf-8") as f:
+	user_code = f.read()
+
+shell = InteractiveShell.instance()
+with capture_output() as captured:
+	try:
+		shell.run_cell(user_code)
+	except Exception as e:
+		import traceback
+		traceback.print_exc()
+
+if plt.get_fignums():
+	plt.savefig(r"${plotPath}")
+	print(fr"[Plot saved to ${plotPath}]")
+	plt.close()
+
+if captured.stdout:
+	print(captured.stdout)
+if captured.stderr:
+	print(captured.stderr, file=sys.stderr)
+	`;
+
+		await fs.writeFile(userCodePath, code, "utf-8");
+		await fs.writeFile(scriptPath, wrapper, "utf-8");
+
+		await new Promise<void>((resolve) => {
+			exec(`python "${scriptPath}"`, async (error, stdout, stderr) => {
+				try {
+					const raw = await fs.readFile(ipynbPath, "utf-8");
+					const notebook = JSON.parse(raw);
+					const cell = notebook.cells.filter(
+						(c: { cell_type: string }) => c.cell_type === "code"
+					)[cellIndex];
+
+					if (cell) {
+						cell.outputs = [];
+						if (stdout) {
+							console.log("Output:", stdout); // TEMPORARY, FOR DEBUGGING
+							cell.outputs.push({
+								output_type: "stream",
+								name: "stdout",
+								text: stdout.split("\n"),
+							});
+						}
+						if (stderr) {
+							cell.outputs.push({
+								output_type: "stream",
+								name: "stderr",
+								text: stderr.split("\n"),
+							});
+						}
+						try {
+							await fs.access(plotPath);
+							const imageData = await fs.readFile(plotPath);
+							const base64 = imageData.toString("base64");
+							cell.outputs.push({
+								output_type: "display_data",
+								data: { "image/png": base64 },
+								metadata: {},
+							});
+						} catch {
+							//
+						}
+
+						await fs.writeFile(
+							ipynbPath,
+							JSON.stringify(notebook, null, 2)
+						);
+						exec(`jupytext --sync "${ipynbPath}"`);
+					}
+				} catch (err) {
+					console.error("Error updating notebook:", err);
+				} finally {
+					resolve();
+				}
+			});
+		});
+
+		setTimeout(async () => {
+			try {
+				await fs.unlink(scriptPath);
+				await fs.unlink(userCodePath);
+			} catch {
+				//
+			}
+		}, 5000);
 	}
 
 	private async executeCodeBlock(editor: Editor, view: MarkdownView) {
@@ -232,53 +347,76 @@ export default class JupytextPlugin extends Plugin {
 			return;
 		}
 
-		const tempDir = os.tmpdir();
-		const tempFilePath = path.join(
-			tempDir,
-			`obsidian_exec_${Date.now()}.py`
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile) return;
+
+		const ipynbPath = this.getAbsolutePath(activeFile).replace(
+			/\.md$/,
+			".ipynb"
 		);
+		const markdownLines = editor.getValue().split("\n");
 
-		try {
-			// Write code to temp file
-			await fs.writeFile(tempFilePath, codeBlock.code);
-
-			// Execute with Python directly
-			const command = `python "${tempFilePath}"`;
-
-			const { stdout, stderr } = await new Promise<{
-				stdout: string;
-				stderr: string;
-			}>((resolve, reject) => {
-				exec(command, (error, stdout, stderr) => {
-					if (error) {
-						resolve({ stdout, stderr }); // We still want to capture the error output
-					} else {
-						resolve({ stdout, stderr });
-					}
-				});
-			});
-
-			// Combine outputs
-			const output = [stdout, stderr].filter(Boolean).join("\n").trim();
-
-			// Insert output
-			const outputMarkdown = output
-				? `\n\n${output.includes("Traceback") ? "```error" : "```output"}\n${output}\n\`\`\``
-				: "\n\n```output\n[Execution completed with no output]\n```";
-
-			editor.replaceRange(outputMarkdown, {
-				line: codeBlock.endPos,
-				ch: editor.getLine(codeBlock.endPos).length,
-			});
-		} catch (error) {
-			new Notice(`Execution failed: ${error.message}`);
-		} finally {
-			// Clean up temp file
-			try {
-				await fs.unlink(tempFilePath);
-			} catch {
-				// Intentionally left empty
+		let cellIndex = 0;
+		let foundBlocks = 0;
+		for (let i = 0; i < markdownLines.length; i++) {
+			const line = markdownLines[i];
+			if (line.trim().startsWith("```")) {
+				if (foundBlocks % 2 === 0 && i < codeBlock.startPos) {
+					cellIndex++;
+				}
+				foundBlocks++;
 			}
 		}
+
+		await this.runCodeAndUpdateNotebook({
+			code: codeBlock.code,
+			cellIndex,
+			ipynbPath,
+		});
+		new Notice("Notebook output updated.");
+	}
+
+	private async executeAllCodeBlocks() {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile) return;
+
+		const fileContent = await this.app.vault.read(activeFile);
+		const lines = fileContent.split("\n");
+		const ipynbPath = this.getAbsolutePath(activeFile).replace(
+			/\.md$/,
+			".ipynb"
+		);
+
+		let inCodeBlock = false;
+		let blockStart = -1;
+		const codeBlocks: string[] = [];
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i].trim();
+			if (line.startsWith("```")) {
+				if (!inCodeBlock) {
+					inCodeBlock = true;
+					blockStart = i;
+				} else {
+					inCodeBlock = false;
+					codeBlocks.push(lines.slice(blockStart + 1, i).join("\n"));
+				}
+			}
+		}
+
+		if (codeBlocks.length === 0) {
+			new Notice("No code blocks found.");
+			return;
+		}
+
+		for (let i = 0; i < codeBlocks.length; i++) {
+			await this.runCodeAndUpdateNotebook({
+				code: codeBlocks[i],
+				cellIndex: i,
+				ipynbPath,
+			});
+		}
+
+		new Notice("All code blocks executed.");
 	}
 }
