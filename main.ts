@@ -10,6 +10,7 @@ import * as path from "path";
 import { promises as fs } from "fs";
 import * as os from "os";
 import { Editor, MarkdownView } from "obsidian";
+import { spawn, ChildProcessWithoutNullStreams } from "child_process";
 
 export default class JupytextPlugin extends Plugin {
 	async onload() {
@@ -55,6 +56,8 @@ export default class JupytextPlugin extends Plugin {
 			callback: () => this.executeAllCodeBlocks(),
 		});
 	}
+
+	private usePersistentPython = true; // TODO: Actual settings page
 
 	// Get the absolute path of a file in the vault
 	getAbsolutePath(file: TFile): string {
@@ -230,10 +233,144 @@ export default class JupytextPlugin extends Plugin {
 		code,
 		cellIndex,
 		ipynbPath,
+		usePersistent = this.usePersistentPython,
 	}: {
 		code: string;
 		cellIndex: number;
 		ipynbPath: string;
+		usePersistent?: boolean;
+	}) {
+		if (usePersistent) {
+			await this.startPythonProcess();
+			const { stdout, stderr } = await this.sendCodeToPython(code);
+
+			try {
+				const raw = await fs.readFile(ipynbPath, "utf-8");
+				const notebook = JSON.parse(raw);
+				const cell = notebook.cells.filter(
+					(c: { cell_type: string }) => c.cell_type === "code"
+				)[cellIndex];
+
+				if (cell) {
+					cell.outputs = [];
+					if (stdout) {
+						cell.outputs.push({
+							output_type: "stream",
+							name: "stdout",
+							text: stdout.split("\n"),
+						});
+					}
+					if (stderr) {
+						cell.outputs.push({
+							output_type: "stream",
+							name: "stderr",
+							text: stderr.split("\n"),
+						});
+					}
+
+					await fs.writeFile(
+						ipynbPath,
+						JSON.stringify(notebook, null, 2)
+					);
+					exec(`jupytext --sync "${ipynbPath}"`);
+				}
+			} catch (err) {
+				console.error("Error updating notebook (persistent):", err);
+			}
+
+			return;
+		}
+
+		const tempDir = os.tmpdir();
+		const plotPath = path.join(tempDir, `obsidian_plot_${Date.now()}.png`);
+
+		let stdout = "";
+		let stderr = "";
+
+		if (usePersistent) {
+			// Inject matplotlib configuration for image generation
+			const wrappedCode = `
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+${code}
+
+if plt.get_fignums():
+	plt.savefig(r"${plotPath}")
+	plt.close()
+	`;
+			const result = await this.sendCodeToPython(wrappedCode);
+			stdout = result.stdout;
+			stderr = result.stderr;
+		} else {
+			// fallback to isolated execution using wrapper script
+			await this.runCodeViaScript({
+				code,
+				cellIndex,
+				ipynbPath,
+				plotPath,
+			});
+			return;
+		}
+
+		try {
+			const raw = await fs.readFile(ipynbPath, "utf-8");
+			const notebook = JSON.parse(raw);
+			const cell = notebook.cells.filter(
+				(c: { cell_type: string }) => c.cell_type === "code"
+			)[cellIndex];
+
+			if (cell) {
+				cell.outputs = [];
+
+				if (stdout)
+					cell.outputs.push({
+						output_type: "stream",
+						name: "stdout",
+						text: stdout.split("\n"),
+					});
+
+				if (stderr)
+					cell.outputs.push({
+						output_type: "stream",
+						name: "stderr",
+						text: stderr.split("\n"),
+					});
+
+				try {
+					await fs.access(plotPath);
+					const imageData = await fs.readFile(plotPath);
+					const base64 = imageData.toString("base64");
+					cell.outputs.push({
+						output_type: "display_data",
+						data: { "image/png": base64 },
+						metadata: {},
+					});
+				} catch {
+					// No plot generated
+				}
+
+				await fs.writeFile(
+					ipynbPath,
+					JSON.stringify(notebook, null, 2)
+				);
+				exec(`jupytext --sync "${ipynbPath}"`);
+			}
+		} catch (err) {
+			console.error("Error updating notebook:", err);
+		}
+	}
+
+	private async runCodeViaScript({
+		code,
+		cellIndex,
+		ipynbPath,
+	}: {
+		code: string;
+		cellIndex: number;
+		ipynbPath: string;
+		plotPath: string;
 	}) {
 		const tempDir = os.tmpdir();
 		const timestamp = Date.now();
@@ -372,6 +509,7 @@ if captured.stderr:
 			code: codeBlock.code,
 			cellIndex,
 			ipynbPath,
+			usePersistent: this.usePersistentPython,
 		});
 		new Notice("Notebook output updated.");
 	}
@@ -419,4 +557,81 @@ if captured.stderr:
 
 		new Notice("All code blocks executed.");
 	}
+
+	private pythonProcess: ChildProcessWithoutNullStreams | null = null;
+	private stdoutBuffer = "";
+	private stderrBuffer = "";
+
+	async startPythonProcess() {
+		if (this.pythonProcess) return;
+
+		this.pythonProcess = spawn("python", ["-i"], {
+			stdio: ["pipe", "pipe", "pipe"],
+		});
+
+		this.pythonProcess.stdout.setEncoding("utf-8");
+		this.pythonProcess.stdout.on("data", (data) => {
+			this.stdoutBuffer += data;
+		});
+
+		this.pythonProcess.stderr.setEncoding("utf-8");
+		this.pythonProcess.stderr.on("data", (data) => {
+			this.stderrBuffer += data;
+		});
+	}
+
+	async stopPythonProcess() {
+		if (this.pythonProcess) {
+			this.pythonProcess.stdin.write("exit()\n");
+			this.pythonProcess.kill();
+			this.pythonProcess = null;
+		}
+	}
+
+	async sendCodeToPython(
+		code: string
+	): Promise<{ stdout: string; stderr: string }> {
+		if (!this.pythonProcess) await this.startPythonProcess();
+
+		this.stdoutBuffer = "";
+		this.stderrBuffer = "";
+
+		// Print a marker so we know where output ends
+		const END_MARKER = "###END###";
+		if (this.pythonProcess && this.pythonProcess.stdin) {
+			this.pythonProcess.stdin.write(
+				code + `\nprint("${END_MARKER}", flush=True)\n`
+			);
+		} else {
+			throw new Error(
+				"Python process is not running or stdin is unavailable."
+			);
+		}
+
+		return new Promise((resolve) => {
+			const checkFinished = () => {
+				if (this.stdoutBuffer.includes(END_MARKER)) {
+					const stdout = this.stdoutBuffer
+						.split(END_MARKER)[0]
+						.trim();
+					const stderr = this.stderrBuffer.trim();
+					resolve({ stdout, stderr });
+				} else {
+					setTimeout(checkFinished, 50);
+				}
+			};
+			checkFinished();
+		});
+	}
+
+	async onunload() {
+		await this.stopPythonProcess();
+	}
 }
+
+/* -TODO-
+- Remove artefacts from outputs
+- Prevent shared memory between files
+	- Maybe make this an option
+- Render output in Obsidian
+*/
