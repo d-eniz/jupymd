@@ -55,6 +55,42 @@ export default class JupytextPlugin extends Plugin {
 			name: "Execute all code blocks in note",
 			callback: () => this.executeAllCodeBlocks(),
 		});
+
+		this.addCommand({
+			id: "clear-current-cell-output",
+			name: "Clear current cell output",
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				const activeFile = this.app.workspace.getActiveFile();
+				if (!activeFile) return;
+
+				const codeBlock = this.getActiveCodeBlock(editor);
+				if (!codeBlock) {
+					new Notice("No code block found at cursor position");
+					return;
+				}
+
+				const markdownLines = editor.getValue().split("\n");
+				let cellIndex = 0;
+				let foundBlocks = 0;
+				for (let i = 0; i < markdownLines.length; i++) {
+					const line = markdownLines[i];
+					if (line.trim().startsWith("```")) {
+						if (foundBlocks % 2 === 0 && i < codeBlock.startPos) {
+							cellIndex++;
+						}
+						foundBlocks++;
+					}
+				}
+
+				this.clearCellOutput(cellIndex);
+			},
+		});
+
+		this.addCommand({
+			id: "clear-all-outputs",
+			name: "Clear all outputs",
+			callback: () => this.clearAllOutputs(),
+		});
 	}
 
 	private usePersistentPython = true; // TODO: Actual settings page
@@ -186,7 +222,10 @@ export default class JupytextPlugin extends Plugin {
 			const mdFile = this.app.vault.getAbstractFileByPath(
 				path.relative(this.app.vault.getRoot().path, mdPath)
 			);
-			if (mdFile instanceof TFile && (await this.isNotebookPaired(mdFile))) {
+			if (
+				mdFile instanceof TFile &&
+				(await this.isNotebookPaired(mdFile))
+			) {
 				exec(`jupytext --sync "${mdPath}"`, (error) => {
 					if (error) {
 						console.error(
@@ -636,10 +675,73 @@ if captured.stderr:
 			checkFinished();
 		});
 	}
+
+	private async clearCellOutput(cellIndex: number) {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile) return;
+
+		const ipynbPath = this.getAbsolutePath(activeFile).replace(
+			/\.md$/,
+			".ipynb"
+		);
+
+		try {
+			const raw = await fs.readFile(ipynbPath, "utf-8");
+			const notebook = JSON.parse(raw);
+			const codeCells = notebook.cells.filter(
+				(c: { cell_type: string }) => c.cell_type === "code"
+			);
+
+			if (cellIndex >= 0 && cellIndex < codeCells.length) {
+				codeCells[cellIndex].outputs = [];
+				await fs.writeFile(
+					ipynbPath,
+					JSON.stringify(notebook, null, 2)
+				);
+				exec(`jupytext --sync "${ipynbPath}"`);
+				new Notice(`Cleared output for cell ${cellIndex + 1}`);
+			} else {
+				new Notice("Invalid cell index");
+			}
+		} catch (err) {
+			console.error("Error clearing cell output:", err);
+			new Notice("Failed to clear cell output");
+		}
+	}
+
+	private async clearAllOutputs() {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile) return;
+
+		const ipynbPath = this.getAbsolutePath(activeFile).replace(
+			/\.md$/,
+			".ipynb"
+		);
+
+		try {
+			const raw = await fs.readFile(ipynbPath, "utf-8");
+			const notebook = JSON.parse(raw);
+
+			notebook.cells.forEach((cell: any) => {
+				if (cell.cell_type === "code" && cell.outputs) {
+					cell.outputs = [];
+				}
+			});
+
+			await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
+			exec(`jupytext --sync "${ipynbPath}"`);
+			new Notice("Cleared all outputs");
+		} catch (err) {
+			console.error("Error clearing all outputs:", err);
+			new Notice("Failed to clear outputs");
+		}
+	}
 }
 
 /* -TODO-
+- Somehow add outputted plots/images to .ipynb
 - Prevent shared memory between files
 	- Maybe make this an option
 - Render output in Obsidian
+- Run button
 */
