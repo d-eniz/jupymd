@@ -8,12 +8,13 @@ import {
 	App,
 	Setting,
 	Modal,
+	Editor,
+	MarkdownView,
 } from "obsidian";
 import { exec } from "child_process";
 import * as path from "path";
 import { promises as fs } from "fs";
 import * as os from "os";
-import { Editor, MarkdownView } from "obsidian";
 import { spawn, ChildProcessWithoutNullStreams } from "child_process";
 
 interface JupytextPluginSettings {
@@ -164,7 +165,7 @@ export default class JupytextPlugin extends Plugin {
 
 		this.addCommand({
 			id: "clear-all-outputs",
-			name: "Clear all outputs",
+			name: "Clear all cell outputs",
 			callback: () => this.clearAllOutputs(),
 		});
 
@@ -179,6 +180,103 @@ export default class JupytextPlugin extends Plugin {
 			name: "Restart Python kernel",
 			callback: () => this.restartKernel(),
 		});
+
+		this.registerMarkdownCodeBlockProcessor(
+			"python",
+			async (source, el, ctx) => {
+				const container = el.createEl("div", {
+					cls: "jupymd-code-block",
+				});
+
+				// Create code display section
+				const codeSection = container.createEl("pre", {
+					cls: "jupymd-code",
+				});
+				codeSection.createEl("code", { text: source });
+
+				// Create output section
+				const outputSection = container.createEl("div", {
+					cls: "jupymd-output",
+				});
+				outputSection.createEl("div", {
+					text: "Loading outputs...",
+					cls: "jupymd-loading",
+				});
+
+				try {
+					const activeFile = this.app.workspace.getActiveFile();
+					if (!activeFile) return;
+
+					const ipynbPath = this.getAbsolutePath(activeFile).replace(
+						/\.md$/,
+						".ipynb"
+					);
+					const raw = await fs.readFile(ipynbPath, "utf-8");
+					const notebook = JSON.parse(raw);
+
+					// Find the current code block's position in the note
+					const fileContent = await this.app.vault.read(activeFile);
+					const lines = fileContent.split("\n");
+
+					let currentBlockIndex = -1;
+					let inCodeBlock = false;
+
+					for (let i = 0; i < lines.length; i++) {
+						const line = lines[i].trim();
+						if (line.startsWith("```python")) {
+							if (!inCodeBlock) {
+								inCodeBlock = true;
+								currentBlockIndex++;
+
+								// Check if this is our block
+								const nextLines = [];
+								let j = i + 1;
+								while (
+									j < lines.length &&
+									!lines[j].trim().startsWith("```")
+								) {
+									nextLines.push(lines[j]);
+									j++;
+								}
+
+								const blockContent = nextLines.join("\n");
+								if (blockContent === source) {
+									break;
+								}
+							}
+						} else if (line.startsWith("```") && inCodeBlock) {
+							inCodeBlock = false;
+						}
+					}
+
+					// Get the corresponding cell in the notebook
+					const codeCells = notebook.cells.filter(
+						(c: { cell_type: string }) => c.cell_type === "code"
+					);
+
+					if (
+						currentBlockIndex >= 0 &&
+						currentBlockIndex < codeCells.length
+					) {
+						const cell = codeCells[currentBlockIndex];
+						this.renderOutputs(outputSection, cell.outputs || []);
+					} else {
+						outputSection.empty();
+						outputSection.createEl("div", {
+							text: "No outputs found",
+							cls: "jupymd-no-output",
+						});
+					}
+				} catch (err) {
+					console.error("Error loading outputs:", err);
+					outputSection.empty();
+					outputSection.createEl("div", {
+						text: "Error loading outputs",
+						cls: "jupymd-error",
+					});
+				}
+			}
+		);
 	}
 
 	private currentNotePath: string | null = null;
@@ -507,6 +605,7 @@ if plt.get_fignums():
 					JSON.stringify(notebook, null, 2)
 				);
 				exec(`jupytext --sync "${ipynbPath}"`);
+				this.forceRerender();
 			}
 		} catch (err) {
 			console.error("Error updating notebook:", err);
@@ -725,42 +824,51 @@ if captured.stderr:
 				ipynbPath,
 			});
 		}
-
+		this.forceRerender();
 		new Notice("All code blocks executed.");
 	}
 
-	async detectAvailableKernels(): Promise<string[]> {
+	async detectAvailableKernels(): Promise<Record<string, any>> {
 		return new Promise((resolve) => {
-			exec("jupyter kernelspec list --json", (error, stdout) => {
-				if (error) {
-					console.error("Error detecting kernels:", error);
-					resolve(["python3"]);
-					return;
+			exec(
+				`python -c "import json; from jupyter_client.kernelspec import KernelSpecManager; print(json.dumps(KernelSpecManager().get_all_specs()))"`,
+				(error, stdout) => {
+					if (error) {
+						console.error("Error detecting kernels:", error);
+						resolve({});
+						return;
+					}
+					try {
+						const result = JSON.parse(stdout);
+						this.settings.availableKernels = Object.keys(result);
+						this.saveSettings();
+						const count = Object.keys(result).length;
+						const plural = count === 1 ? "" : "s";
+						new Notice(`Detected ${count} kernel${plural}`);
+						resolve(result);
+					} catch (e) {
+						console.error("Error parsing kernels:", e);
+						resolve({});
+					}
 				}
-
-				try {
-					const result = JSON.parse(stdout);
-					const kernels = Object.keys(result.kernelspecs);
-					this.settings.availableKernels = kernels;
-					this.saveSettings();
-					resolve(kernels);
-				} catch (e) {
-					console.error("Error parsing kernels:", e);
-					resolve(["python3"]);
-				}
-			});
+			);
 		});
 	}
 
 	async selectKernel() {
-		const kernels = await this.detectAvailableKernels();
+		const kernelspecs = await this.detectAvailableKernels();
 
-		new Notice(`Available kernels: ${kernels.join(", ")}`);
+		const kernelEntries = Object.entries(kernelspecs);
+
+		if (kernelEntries.length === 0) {
+			new Notice("No kernels found.");
+			return;
+		}
 
 		const modal = new (class extends Modal {
 			constructor(
 				app: App,
-				private kernels: string[],
+				private kernelEntries: [string, any][],
 				private plugin: JupytextPlugin
 			) {
 				super(app);
@@ -770,17 +878,18 @@ if captured.stderr:
 				const contentEl = this.modalEl;
 				contentEl.createEl("h2", { text: "Select Python Kernel" });
 
-				this.kernels.forEach((kernel) => {
+				this.kernelEntries.forEach(([kernelName, spec]) => {
+					const display = spec.spec?.display_name || kernelName;
 					contentEl
 						.createEl("button", {
-							text: kernel,
+							text: display,
 							cls: "mod-cta",
 							attr: { style: "margin: 5px;" },
 						})
 						.addEventListener("click", () => {
-							this.plugin.settings.defaultKernel = kernel;
+							this.plugin.settings.defaultKernel = kernelName;
 							this.plugin.saveSettings();
-							new Notice(`Selected kernel: ${kernel}`);
+							new Notice(`Selected kernel: ${display}`);
 							this.close();
 						});
 				});
@@ -790,7 +899,7 @@ if captured.stderr:
 				const { contentEl } = this;
 				contentEl.empty();
 			}
-		})(this.app, kernels, this);
+		})(this.app, kernelEntries, this);
 
 		modal.open();
 	}
@@ -815,6 +924,7 @@ if captured.stderr:
 		await this.getKernelCommand(this.currentKernel);
 
 		this.pythonProcess = spawn("python", ["-i", "-q"], {
+			// ! CRUCIAL, -i -> INTERACTIVE MODE; -q -> QUIET MODE
 			stdio: ["pipe", "pipe", "pipe"],
 		});
 
@@ -935,6 +1045,7 @@ if captured.stderr:
 					JSON.stringify(notebook, null, 2)
 				);
 				exec(`jupytext --sync "${ipynbPath}"`);
+				this.forceRerender();
 				new Notice(`Cleared output for cell ${cellIndex + 1}`);
 			} else {
 				new Notice("Invalid cell index");
@@ -966,6 +1077,8 @@ if captured.stderr:
 
 			await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
 			exec(`jupytext --sync "${ipynbPath}"`);
+			this.forceRerender();
+
 			new Notice("Cleared all outputs");
 		} catch (err) {
 			console.error("Error clearing all outputs:", err);
@@ -978,10 +1091,99 @@ if captured.stderr:
 		this.currentNotePath = null;
 		new Notice("Python kernel restarted");
 	}
+
+	private renderOutputs(container: HTMLElement, outputs: any[]) {
+		container.empty();
+
+		if (!outputs || outputs.length === 0) {
+			container.remove();
+			return;
+		}
+
+		const outputContainer = container.createEl("div", {
+			cls: "jupymd-output-container",
+		});
+
+		outputs.forEach((output) => {
+			switch (output.output_type) {
+				case "stream": {
+					const streamEl = outputContainer.createEl("div", {
+						cls: `jupymd-stream jupymd-${output.name}`,
+					});
+					const text = Array.isArray(output.text)
+						? output.text.join("")
+						: output.text;
+					streamEl
+						.createEl("pre", { cls: "cm-line" })
+						.createEl("code", {
+							text: text,
+						});
+					break;
+				}
+
+				case "display_data":
+				case "execute_result":
+					if (output.data["image/png"]) {
+						const imgContainer = outputContainer.createEl("div", {
+							cls: "jupymd-image-container",
+						});
+						const imgEl = imgContainer.createEl("img", {
+							cls: "jupymd-image",
+						});
+						imgEl.src = `data:image/png;base64,${output.data["image/png"]}`;
+					}
+					if (output.data["text/plain"]) {
+						const text = Array.isArray(output.data["text/plain"])
+							? output.data["text/plain"].join("")
+							: output.data["text/plain"];
+						const textEl = outputContainer.createEl("div", {
+							cls: "jupymd-text-output",
+						});
+						textEl
+							.createEl("pre", { cls: "cm-line" })
+							.createEl("code", {
+								text: text,
+							});
+					}
+					break;
+
+				case "error": {
+					const errorEl = outputContainer.createEl("div", {
+						cls: "jupymd-error-output",
+					});
+					const traceback = Array.isArray(output.traceback)
+						? output.traceback.join("\n")
+						: output.traceback;
+					errorEl
+						.createEl("pre", { cls: "cm-line" })
+						.createEl("code", {
+							text: traceback,
+						});
+					break;
+				}
+			}
+		});
+	}
+
+	private forceRerender() {
+		// Not my ideal solution but it works
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		const leaf = this.app.workspace.getLeavesOfType(
+			view?.getViewType() ?? ""
+		)[0];
+		if (leaf && typeof (leaf as any).rebuildView === "function") {
+			(leaf as any).rebuildView();
+		}
+	}
 }
 
 /* -TODO-
+- Refactor into modules under /src
+- Show kernel status in status bar (click to go to note with active kernel)
 - Somehow add outputted plots/images to .ipynb
-- Render output in Obsidian
+- Fix syntax highlighting
+- Fix clicking on code block behaviour
 - Run button
+- Remove Promise
+https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines
 */
