@@ -1,0 +1,77 @@
+.jupymd-code-block {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    margin: 1em 0;
+}
+
+.jupymd-code {
+    background-color: var(--background-primary);
+    padding: 0.5em;
+    margin: 0;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.jupymd-output {
+    padding: 0.5em;
+    background: none !important;
+}
+
+.jupymd-stream {
+    margin: 0;
+    white-space: pre-wrap;
+    background: none !important;
+}
+
+.jupymd-stdout {
+    color: var(--text-normal);
+    background: none !important;
+}
+
+.jupymd-stderr {
+    color: var(--text-error);
+    background: none !important;
+}
+
+.jupymd-image {
+    max-width: 100%;
+    display: block;
+    background: none !important;
+}
+
+.jupymd-text-output {
+    margin: 0;
+    white-space: pre-wrap;
+    background: none !important;
+}
+
+.jupymd-error-output {
+    margin: 0;
+    white-space: pre-wrap;
+    color: var(--text-error);
+    background: none !important;
+}
+
+.jupymd-loading,
+.jupymd-no-output {
+    color: var(--text-muted);
+    font-style: italic;
+    background: none !important;
+}
+
+.jupymd-error {
+    color: var(--text-error);
+    background: none !important;
+}
+
+.jupymd-output code {
+    background: none !important;
+    padding: 0 !important;
+}
+
+.jupymd-output pre {
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
