@@ -181,22 +181,91 @@ export default class JupytextPlugin extends Plugin {
 			callback: () => this.restartKernel(),
 		});
 
+		this.cmStyleEl = document.createElement("style");
+		this.cmStyleEl.id = "jupymd-codemirror-overrides";
+		document.head.appendChild(this.cmStyleEl);
+
 		this.registerMarkdownCodeBlockProcessor(
 			"python",
 			async (source, el, ctx) => {
+				el.empty();
+
 				const container = el.createEl("div", {
 					cls: "jupymd-code-block",
 				});
 
-				// Create code display section
-				const codeSection = container.createEl("pre", {
-					cls: "jupymd-code",
+				const codeSection = container.createEl("div", {
+					cls: "jupymd-code-container",
 				});
-				codeSection.createEl("code", { text: source });
 
-				// Create output section
+				const cmContainer = codeSection.createEl("div");
+
+				const editor = (window as any).CodeMirror(cmContainer, {
+					value: source,
+					mode: "python",
+					theme: "obsidian",
+					lineNumbers: false,
+					readOnly: "nocursor",
+					lineWrapping: true,
+					viewportMargin: 0,
+					indentUnit: 4,
+					gutters: [],
+					fixedGutter: false,
+				});
+
+				cmContainer.addEventListener("click", (e) => {
+					const view =
+						this.app.workspace.getActiveViewOfType(MarkdownView);
+					if (!view) return;
+
+					const mainEditor = view.editor;
+					const fileContent = mainEditor.getValue();
+
+					const sectionInfo = ctx.getSectionInfo(el);
+					if (!sectionInfo) return;
+
+					const cursor = editor.coordsChar(
+						{ top: e.clientY, left: e.clientX },
+						"page"
+					);
+
+					const lineInBlock = cursor.line;
+					const blockStartLine = sectionInfo.lineStart;
+					const targetLine = blockStartLine + 1 + lineInBlock;
+
+					const lines = fileContent.split("\n");
+					let blockEndLine = blockStartLine;
+					for (let i = blockStartLine + 1; i < lines.length; i++) {
+						if (lines[i].trim().startsWith("```")) {
+							blockEndLine = i;
+							break;
+						}
+					}
+
+					if (
+						targetLine >= blockStartLine &&
+						targetLine < blockEndLine
+					) {
+						mainEditor.focus();
+						mainEditor.setCursor({
+							line: targetLine,
+							ch: Math.min(
+								mainEditor.getLine(targetLine).length,
+								cursor.ch
+							),
+						});
+					}
+				});
+
+				this.applyCodeMirrorOverrides();
+				setTimeout(() => editor.refresh(), 50);
+
 				const outputSection = container.createEl("div", {
 					cls: "jupymd-output",
+					attr: {
+						"contenteditable": "false",
+						"tabindex": "0"
+					}
 				});
 				outputSection.createEl("div", {
 					text: "Loading outputs...",
@@ -228,7 +297,6 @@ export default class JupytextPlugin extends Plugin {
 								inCodeBlock = true;
 								currentBlockIndex++;
 
-								// Check if this is our block
 								const nextLines = [];
 								let j = i + 1;
 								while (
@@ -249,7 +317,6 @@ export default class JupytextPlugin extends Plugin {
 						}
 					}
 
-					// Get the corresponding cell in the notebook
 					const codeCells = notebook.cells.filter(
 						(c: { cell_type: string }) => c.cell_type === "code"
 					);
@@ -297,7 +364,6 @@ export default class JupytextPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	// Get the absolute path of a file in the vault
 	getAbsolutePath(file: TFile): string {
 		const adapter = this.app.vault.adapter;
 		if (adapter instanceof FileSystemAdapter) {
@@ -676,7 +742,6 @@ if captured.stderr:
 					if (cell) {
 						cell.outputs = [];
 						if (stdout) {
-							console.log("Output:", stdout); // TEMPORARY, FOR DEBUGGING
 							cell.outputs.push({
 								output_type: "stream",
 								name: "stdout",
@@ -739,7 +804,6 @@ if captured.stderr:
 			return;
 		}
 
-		// Track the current note
 		this.currentNotePath = currentPath;
 
 		const codeBlock = this.getActiveCodeBlock(editor);
@@ -989,7 +1053,6 @@ if captured.stderr:
 		this.stdoutBuffer = "";
 		this.stderrBuffer = "";
 
-		// Print a marker so we know where output ends
 		const END_MARKER = "###END###";
 		if (this.pythonProcess && this.pythonProcess.stdin) {
 			this.pythonProcess.stdin.write(
@@ -1008,7 +1071,6 @@ if captured.stderr:
 						.split(END_MARKER)[0]
 						.trim();
 
-					// Important: Filter out the >>> prompts from stderr
 					const stderr = this.stderrBuffer
 						.replace(/>>>\s*/g, "") // Remove >>> and any space after it
 						.trim();
@@ -1116,36 +1178,11 @@ if captured.stderr:
 					streamEl
 						.createEl("pre", { cls: "cm-line" })
 						.createEl("code", {
+							cls: `jupymd-${output.name}`,
 							text: text,
 						});
 					break;
 				}
-
-				case "display_data":
-				case "execute_result":
-					if (output.data["image/png"]) {
-						const imgContainer = outputContainer.createEl("div", {
-							cls: "jupymd-image-container",
-						});
-						const imgEl = imgContainer.createEl("img", {
-							cls: "jupymd-image",
-						});
-						imgEl.src = `data:image/png;base64,${output.data["image/png"]}`;
-					}
-					if (output.data["text/plain"]) {
-						const text = Array.isArray(output.data["text/plain"])
-							? output.data["text/plain"].join("")
-							: output.data["text/plain"];
-						const textEl = outputContainer.createEl("div", {
-							cls: "jupymd-text-output",
-						});
-						textEl
-							.createEl("pre", { cls: "cm-line" })
-							.createEl("code", {
-								text: text,
-							});
-					}
-					break;
 
 				case "error": {
 					const errorEl = outputContainer.createEl("div", {
@@ -1157,6 +1194,7 @@ if captured.stderr:
 					errorEl
 						.createEl("pre", { cls: "cm-line" })
 						.createEl("code", {
+							cls: "jupymd-stderr",
 							text: traceback,
 						});
 					break;
@@ -1175,14 +1213,66 @@ if captured.stderr:
 			(leaf as any).rebuildView();
 		}
 	}
+
+	private cmStyleEl: HTMLStyleElement;
+
+	private applyCodeMirrorOverrides() {
+		// Clear existing rules
+		while (this.cmStyleEl.sheet?.cssRules.length) {
+			this.cmStyleEl.sheet.deleteRule(0);
+		}
+
+		// Add new rules safely
+		if (this.cmStyleEl.sheet) {
+			const rules = [
+				`.jupymd-code-container .CodeMirror-line {
+					line-height: 1 !important;
+					height: auto !important;
+					padding: 5px !important;
+					margin: 0 !important;
+					min-height: unset !important;
+					font-family: var(--font-monospace) !important;
+					font-size: 14px !important;
+				}`,
+				`.jupymd-code-container .CodeMirror-line > span {
+					line-height: 1.2 !important;
+					vertical-align: top !important;
+				}`,
+				`.jupymd-code-container .CodeMirror-line > span > span {
+					line-height: 1.2 !important;
+				}`,
+				/* New rules for output window */
+				`.jupymd-output {
+					background: none !important;
+					padding: 8px !important;
+					border-top: 1px solid var(--background-modifier-border) !important;
+				}`,
+				`.jupymd-output pre, .jupymd-output code {
+					background: none !important;
+				}`,
+				`.jupymd-output .jupymd-stream,
+				 .jupymd-output .jupymd-text-output,
+				 .jupymd-output .jupymd-error-output {
+					background: none !important;
+					margin: 0 !important;
+					padding: 5px !important;
+				}`,
+			];
+
+			rules.forEach((rule) => {
+				this.cmStyleEl.sheet?.insertRule(
+					rule,
+					this.cmStyleEl.sheet.cssRules.length
+				);
+			});
+		}
+	}
 }
 
 /* -TODO-
 - Refactor into modules under /src
 - Show kernel status in status bar (click to go to note with active kernel)
 - Somehow add outputted plots/images to .ipynb
-- Fix syntax highlighting
-- Fix clicking on code block behaviour
 - Run button
 - Remove Promise
 https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines

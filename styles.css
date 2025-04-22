@@ -1,77 +1,64 @@
+.CodeMirror span[style*="visibility: hidden"] {
+    display: none !important;
+}
+
+.CodeMirror-measure {
+    visibility: hidden !important;
+    position: absolute !important;
+    left: -9999px !important;
+    top: -9999px !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+}
+
+.jupymd-code-container .CodeMirror {
+    pointer-events: none;
+}
+
+.jupymd-code-container .CodeMirror-scrollbar-filler,
+.jupymd-code-container .CodeMirror-gutter-filler,
+.jupymd-code-container .CodeMirror-vscrollbar,
+.jupymd-code-container .CodeMirror-hscrollbar,
+.jupymd-code-container .CodeMirror-cursors,
+.jupymd-code-container .CodeMirror-measure,
+.jupymd-code-container .CodeMirror-gutters,
+.jupymd-code-container .CodeMirror textarea {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+}
+
 .jupymd-code-block {
     border: 1px solid var(--background-modifier-border);
     border-radius: 4px;
     margin: 1em 0;
+    overflow: hidden;
 }
 
-.jupymd-code {
-    background-color: var(--background-primary);
-    padding: 0.5em;
-    margin: 0;
-    border-bottom: 1px solid var(--background-modifier-border);
+/* Code section - keep background */
+.jupymd-code-container {
+    background: var(--background-primary-alt);
+    padding: 8px;
 }
 
+/* Base output styles (will be overridden) */
 .jupymd-output {
-    padding: 0.5em;
-    background: none !important;
+    padding: 8px;
+    border-top: 1px solid var(--background-modifier-border);
 }
 
-.jupymd-stream {
+/* Base styles that can be overridden by our dynamic rules */
+.jupymd-code-container .CodeMirror {
+    --line-height-normal: 1.2;
+}
+
+.jupymd-code-container .CodeMirror pre {
+    padding: 0;
     margin: 0;
-    white-space: pre-wrap;
-    background: none !important;
-}
-
-.jupymd-stdout {
-    color: var(--text-normal);
-    background: none !important;
-}
-
-.jupymd-stderr {
-    color: var(--text-error);
-    background: none !important;
-}
-
-.jupymd-image {
-    max-width: 100%;
-    display: block;
-    background: none !important;
-}
-
-.jupymd-text-output {
-    margin: 0;
-    white-space: pre-wrap;
-    background: none !important;
-}
-
-.jupymd-error-output {
-    margin: 0;
-    white-space: pre-wrap;
-    color: var(--text-error);
-    background: none !important;
-}
-
-.jupymd-loading,
-.jupymd-no-output {
-    color: var(--text-muted);
-    font-style: italic;
-    background: none !important;
-}
-
-.jupymd-error {
-    color: var(--text-error);
-    background: none !important;
-}
-
-.jupymd-output code {
-    background: none !important;
-    padding: 0 !important;
-}
-
-.jupymd-output pre {
-    background: none !important;
-    border: none !important;
-    box-shadow: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
 }
