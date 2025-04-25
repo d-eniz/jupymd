@@ -1,11 +1,10 @@
 import { App, Editor, Notice, MarkdownView } from "obsidian";
-import JupyMDPlugin from "../main";
 import { getAbsolutePath } from "src/utils/helpers";
 import * as fs from "fs/promises";
 import { exec } from "child_process";
 
 export class NotebookUI {
-	constructor(private plugin: JupyMDPlugin, private app: App) {
+	constructor(private app: App) {
 		this.cmStyleEl = document.createElement("style");
 		this.cmStyleEl.id = "jupymd-codemirror-overrides";
 		document.head.appendChild(this.cmStyleEl);
