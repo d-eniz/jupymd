@@ -1,12 +1,11 @@
 import { App, Notice, TAbstractFile, TFile } from "obsidian";
 import { exec } from "child_process";
-import JupyMDPlugin from "../main";
 import { getAbsolutePath } from "../utils/helpers";
 import * as fs from "fs/promises";
 import * as path from "path";
 
 export class FileSync {
-	constructor(private plugin: JupyMDPlugin, private app: App) {}
+	constructor(private app: App) {}
 
 	async isNotebookPaired(file: TFile): Promise<boolean> {
 		const mdPath = await getAbsolutePath(file);
