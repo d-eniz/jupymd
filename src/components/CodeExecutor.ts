@@ -2,7 +2,7 @@ import { ChildProcessWithoutNullStreams } from "child_process";
 import { spawn } from "child_process";
 import JupyMDPlugin from "../main";
 import { KernelManager } from "./KernelManager";
-import { App, Editor, MarkdownView, Notice } from "obsidian";
+import { App, Editor, Notice } from "obsidian";
 import { exec } from "child_process";
 import { getAbsolutePath } from "../utils/helpers";
 import * as fs from "fs/promises";
@@ -22,10 +22,11 @@ export class CodeExecutor {
 
 	constructor(private plugin: JupyMDPlugin, private app: App) {
 		this.notebookUI = new NotebookUI(this.plugin, this.app);
-		this.settings = this.plugin.settings;this.kernelManager = new KernelManager(this.plugin, this.app);
+		this.settings = this.plugin.settings;
+		this.kernelManager = new KernelManager(this.plugin, this.app);
 	}
 
-	async executeCodeBlock(editor: Editor, view: MarkdownView) {
+	async executeCodeBlock(editor: Editor) {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) return;
 
