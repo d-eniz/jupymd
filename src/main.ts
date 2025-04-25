@@ -26,8 +26,8 @@ export default class JupyMDPlugin extends Plugin {
 		this.kernelManager.executor = this.executor;
 		this.executor.kernelManager = this.kernelManager;
 
-		this.fileSync = new FileSync(this, this.app);
-		this.notebookUI = new NotebookUI(this, this.app);
+		this.fileSync = new FileSync(this.app);
+		this.notebookUI = new NotebookUI(this.app);
 
 		this.addSettingTab(new JupyMDSettingTab(this.app, this));
 
