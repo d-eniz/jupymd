@@ -19,25 +19,6 @@ export class JupyMDSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "JupyMD Settings" });
-
-		new Setting(containerEl)
-			.setName("Use persistent Python process")
-			.setDesc(
-				"Maintain a running Python process between executions for better performance"
-			)
-			.addToggle((toggle) => {
-				toggle
-					.setValue(this.plugin.settings.usePersistentPython)
-					.onChange(async (value) => {
-						this.plugin.settings.usePersistentPython = value;
-						await this.plugin.saveSettings();
-						if (!value) {
-							await this.executor.stopPythonProcess();
-						}
-					});
-			});
-
 		new Setting(containerEl)
 			.setName("Default Python kernel")
 			.setDesc("Select the default Python kernel for execution")
