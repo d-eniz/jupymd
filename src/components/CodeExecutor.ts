@@ -6,8 +6,6 @@ import { App, Editor, Notice } from "obsidian";
 import { exec } from "child_process";
 import { getAbsolutePath } from "../utils/helpers";
 import * as fs from "fs/promises";
-import * as os from "os";
-import * as path from "path";
 import { NotebookUI } from "./NotebookUI";
 import { JupyMDPluginSettings } from "./types";
 
@@ -21,7 +19,7 @@ export class CodeExecutor {
 	kernelManager: KernelManager;
 
 	constructor(private plugin: JupyMDPlugin, private app: App) {
-		this.notebookUI = new NotebookUI(this.plugin, this.app);
+		this.notebookUI = new NotebookUI(this.app);
 		this.settings = this.plugin.settings;
 		this.kernelManager = new KernelManager(this.plugin, this.app);
 	}
@@ -70,7 +68,6 @@ export class CodeExecutor {
 			code: codeBlock.code,
 			cellIndex,
 			ipynbPath,
-			usePersistent: this.settings.usePersistentPython,
 		});
 		new Notice("Notebook output updated.");
 	}
@@ -136,86 +133,17 @@ export class CodeExecutor {
 		code,
 		cellIndex,
 		ipynbPath,
-		usePersistent = this.settings.usePersistentPython,
 	}: {
 		code: string;
 		cellIndex: number;
 		ipynbPath: string;
-		usePersistent?: boolean;
 	}) {
-		if (usePersistent) {
-			await this.startPythonProcess();
-			const { stdout, stderr } = await this.sendCodeToPython(code);
-
-			try {
-				const raw = await fs.readFile(ipynbPath, "utf-8");
-				const notebook = JSON.parse(raw);
-				const cell = notebook.cells.filter(
-					(c: { cell_type: string }) => c.cell_type === "code"
-				)[cellIndex];
-
-				if (cell) {
-					cell.outputs = [];
-					if (stdout) {
-						cell.outputs.push({
-							output_type: "stream",
-							name: "stdout",
-							text: stdout.split("\n"),
-						});
-					}
-					if (stderr) {
-						cell.outputs.push({
-							output_type: "stream",
-							name: "stderr",
-							text: stderr.split("\n"),
-						});
-					}
-
-					await fs.writeFile(
-						ipynbPath,
-						JSON.stringify(notebook, null, 2)
-					);
-					exec(`jupytext --sync "${ipynbPath}"`);
-				}
-			} catch (err) {
-				console.error("Error updating notebook (persistent):", err);
-			}
-
-			return;
-		}
-
-		const tempDir = os.tmpdir();
-		const plotPath = path.join(tempDir, `obsidian_plot_${Date.now()}.png`);
-
 		let stdout = "";
 		let stderr = "";
 
-		if (usePersistent) {
-			// Inject matplotlib configuration for image generation
-			const wrappedCode = `
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-
-${code}
-
-if plt.get_fignums():
-	plt.savefig(r"${plotPath}")
-	plt.close()
-	`;
-			const result = await this.sendCodeToPython(wrappedCode);
-			stdout = result.stdout;
-			stderr = result.stderr;
-		} else {
-			// fallback to isolated execution using wrapper script
-			await this.runCodeViaScript({
-				code,
-				cellIndex,
-				ipynbPath,
-				plotPath,
-			});
-			return;
-		}
+		const result = await this.sendCodeToPython(code);
+		stdout = result.stdout;
+		stderr = result.stderr;
 
 		try {
 			const raw = await fs.readFile(ipynbPath, "utf-8");
@@ -242,19 +170,6 @@ if plt.get_fignums():
 					});
 				}
 
-				try {
-					await fs.access(plotPath);
-					const imageData = await fs.readFile(plotPath);
-					const base64 = imageData.toString("base64");
-					cell.outputs.push({
-						output_type: "display_data",
-						data: { "image/png": base64 },
-						metadata: {},
-					});
-				} catch {
-					// No plot generated
-				}
-
 				await fs.writeFile(
 					ipynbPath,
 					JSON.stringify(notebook, null, 2)
@@ -265,120 +180,6 @@ if plt.get_fignums():
 		} catch (err) {
 			console.error("Error updating notebook:", err);
 		}
-	}
-
-	async runCodeViaScript({
-		code,
-		cellIndex,
-		ipynbPath,
-	}: {
-		code: string;
-		cellIndex: number;
-		ipynbPath: string;
-		plotPath: string;
-	}) {
-		const tempDir = os.tmpdir();
-		const timestamp = Date.now();
-		const userCodePath = path.join(
-			tempDir,
-			`obsidian_user_code_${timestamp}.py`
-		);
-		const scriptPath = path.join(tempDir, `obsidian_exec_${timestamp}.py`);
-		const plotPath = path.join(tempDir, `obsidian_plot_${timestamp}.png`);
-
-		const wrapper = `
-import sys, os
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from IPython.core.interactiveshell import InteractiveShell
-from IPython.utils.capture import capture_output
-
-with open(r"${userCodePath}", "r", encoding="utf-8") as f:
-	user_code = f.read()
-
-shell = InteractiveShell.instance()
-with capture_output() as captured:
-	try:
-		shell.run_cell(user_code)
-	except Exception as e:
-		import traceback
-		traceback.print_exc()
-
-if plt.get_fignums():
-	plt.savefig(r"${plotPath}")
-	print(fr"[Plot saved to ${plotPath}]")
-	plt.close()
-
-if captured.stdout:
-	print(captured.stdout)
-if captured.stderr:
-	print(captured.stderr, file=sys.stderr)
-	`;
-
-		await fs.writeFile(userCodePath, code, "utf-8");
-		await fs.writeFile(scriptPath, wrapper, "utf-8");
-
-		await new Promise<void>((resolve) => {
-			exec(`python "${scriptPath}"`, async (error, stdout, stderr) => {
-				try {
-					const raw = await fs.readFile(ipynbPath, "utf-8");
-					const notebook = JSON.parse(raw);
-					const cell = notebook.cells.filter(
-						(c: { cell_type: string }) => c.cell_type === "code"
-					)[cellIndex];
-
-					if (cell) {
-						cell.outputs = [];
-						if (stdout) {
-							cell.outputs.push({
-								output_type: "stream",
-								name: "stdout",
-								text: stdout.split("\n"),
-							});
-						}
-						if (stderr) {
-							cell.outputs.push({
-								output_type: "stream",
-								name: "stderr",
-								text: stderr.split("\n"),
-							});
-						}
-						try {
-							await fs.access(plotPath);
-							const imageData = await fs.readFile(plotPath);
-							const base64 = imageData.toString("base64");
-							cell.outputs.push({
-								output_type: "display_data",
-								data: { "image/png": base64 },
-								metadata: {},
-							});
-						} catch {
-							//
-						}
-
-						await fs.writeFile(
-							ipynbPath,
-							JSON.stringify(notebook, null, 2)
-						);
-						exec(`jupytext --sync "${ipynbPath}"`);
-					}
-				} catch (err) {
-					console.error("Error updating notebook:", err);
-				} finally {
-					resolve();
-				}
-			});
-		});
-
-		setTimeout(async () => {
-			try {
-				await fs.unlink(scriptPath);
-				await fs.unlink(userCodePath);
-			} catch {
-				//
-			}
-		}, 5000);
 	}
 
 	async startPythonProcess() {
