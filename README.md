@@ -1,8 +1,17 @@
 # JupyMD for Obsidian
 
-Creates and syncs Jupyter Notebooks from markdown notes through Jupytext.
+Enables Jupyter notebook functionality in Obsidian. Make markdown files behave like `.ipynb` notebooks, with live code execution, rich output rendering, and bidirectional syncing between `.md` and `.ipynb` files.
 
 ![plugin.gif](assets/plugin.gif)
+
+## Features
+
+- **Notebook Conversion** – Convert existing notes in Obsidian to `.ipynb` files via Jupytext
+- **Bidirectional Updates** – Changes in Obsidian or Jupyter automatically sync between `.md` and `.ipynb` files
+- **Execute Code** – Run code blocks in Obsidian with output captured below each block
+- **True Jupyter Sync** – Executed code blocks automatically update output metadata in linked `.ipynb` file
+- **Persistent Outputs** – Executed code outputs stay visible after restart and sync to `.ipynb` file
+- **Kernel Management** – Maintains Python kernel state across executions within a notebook
 
 ## Prerequisites
 
@@ -11,21 +20,8 @@ Creates and syncs Jupyter Notebooks from markdown notes through Jupytext.
   `pip install notebook`
 - [Jupytext](https://github.com/mwouts/jupytext)
   `pip install jupytext`
-- (Optional) [Jupyter Lab](https://code.visualstudio.com/)
-  `pip install jupyterlab`
-- (Optional) [Visual Studio Code](https://code.visualstudio.com/)
 
-## Features
-
-`JupyMD: Create Jupyter Notebook from Note`
-
-- Creates Jupyter Notebook from current file
-- Syncs markdown and notebook files when either file is saved
-
-`JupyMD: Open Jupyter Notebook in VS Code`
-
-- Opens current file in VS Code if Jupyter Notebook version exists
-
-`JupyMD: Open Jupyter Notebook in Jupyter Lab`
-
-- Opens current file in Jupyter Lab if Jupyter Notebook version exists
+> [!NOTE]
+> JupyMD currently supports Python execution only.
+> 
+> Future versions will expand language support, though this feature is not yet in active development. Your help is appreciated, feel free to open an issue or submit a pull request if you would like to contribute!
