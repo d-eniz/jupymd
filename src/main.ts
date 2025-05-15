@@ -18,8 +18,6 @@ export default class JupyMDPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		registerCommands(this)
-
 		this.kernelManager = new KernelManager(this, this.app);
 		this.executor = new CodeExecutor(this, this.app);
 
@@ -28,6 +26,8 @@ export default class JupyMDPlugin extends Plugin {
 
 		this.fileSync = new FileSync(this.app);
 		this.notebookUI = new NotebookUI(this.app);
+
+		registerCommands(this);
 
 		this.addSettingTab(new JupyMDSettingTab(this.app, this));
 
