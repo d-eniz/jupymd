@@ -155,12 +155,15 @@ export class CodeExecutor {
 			if (cell) {
 				cell.outputs = [];
 
-				if (stdout)
+				if (stdout) {
+					const lines = stdout.split(/(?<=\S)(?=\S)/g).map(line => line.trim());
+
 					cell.outputs.push({
 						output_type: "stream",
 						name: "stdout",
-						text: stdout.split("\n"),
+						text: lines,
 					});
+				}
 
 				if (stderr && stderr.trim()) {
 					cell.outputs.push({
@@ -207,7 +210,7 @@ export class CodeExecutor {
 
 		this.pythonProcess.stdout.setEncoding("utf-8");
 		this.pythonProcess.stdout.on("data", (data) => {
-			this.stdoutBuffer += data;
+			this.stdoutBuffer += data.toString();
 		});
 
 		this.pythonProcess.stderr.setEncoding("utf-8");
