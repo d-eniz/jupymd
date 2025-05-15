@@ -1,4 +1,4 @@
-export interface JupyMDPluginSettings {
+export type JupyMDPluginSettings = {
 	defaultKernel: string;
 	availableKernels: string[];
 	usePersistentPython: boolean;
