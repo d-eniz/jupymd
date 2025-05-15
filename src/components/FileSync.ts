@@ -26,10 +26,9 @@ export class FileSync {
 			return;
 		}
 
-		const mdPath = getAbsolutePath(activeFile);
+		const mdPath = await getAbsolutePath(activeFile);
 		const ipynbPath = (await mdPath).replace(/\.md$/, ".ipynb");
 
-		// Check if the notebook is already paired
 		if (await this.isNotebookPaired(activeFile)) {
 			new Notice("Notebook is already paired with this note.");
 			return;
