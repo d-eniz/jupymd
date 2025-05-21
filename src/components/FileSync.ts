@@ -7,9 +7,9 @@ import * as path from "path";
 export class FileSync {
 	constructor(private app: App) {}
 
-	async isNotebookPaired(file: TFile): Promise<boolean> {
+	async isNotebookPaired(file: any): Promise<boolean> {
 		const mdPath = await getAbsolutePath(file);
-		const ipynbPath = (await mdPath).replace(/\.md$/, ".ipynb");
+		const ipynbPath = mdPath.replace(/\.md$/, ".ipynb");
 
 		try {
 			await fs.access(ipynbPath, fs.constants.F_OK);
