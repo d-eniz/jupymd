@@ -9,3 +9,9 @@ export const DEFAULT_SETTINGS: JupyMDPluginSettings = {
 	availableKernels: ["python3"],
 	usePersistentPython: true,
 };
+
+export type CodeBlock = {
+	code: string;
+	startPos: number;
+	endPos: number;
+};
