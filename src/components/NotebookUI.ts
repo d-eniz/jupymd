@@ -1,17 +1,29 @@
 import { App, Editor, Notice, MarkdownView } from "obsidian";
-import { getAbsolutePath } from "src/utils/helpers";
+import { getAbsolutePath, getCellIndex } from "src/utils/helpers";
 import * as fs from "fs/promises";
 import { exec } from "child_process";
+import { CodeExecutor } from "./CodeExecutor";
+import { FileSync } from "./FileSync";
 
 export class NotebookUI {
+	executor: CodeExecutor;
+	fileSync: FileSync;
+
 	constructor(private app: App) {
 		this.cmStyleEl = document.createElement("style");
 		this.cmStyleEl.id = "jupymd-codemirror-overrides";
+		this.fileSync = new FileSync(app);
 		document.head.appendChild(this.cmStyleEl);
 	}
 
-	getActiveCodeBlock(editor: Editor) {
+	setExecutor(executor: CodeExecutor) {
+		this.executor = executor;
+	}
+
+	getActiveCodeBlock(editor: Editor | undefined) {
+		// @ts-ignore
 		const cursor = editor.getCursor();
+		// @ts-ignore
 		const content = editor.getValue();
 		const lines = content.split("\n");
 
@@ -55,7 +67,7 @@ export class NotebookUI {
 			container.remove();
 			return;
 		}
-
+		
 		const outputContainer = container.createEl("div", {
 			cls: "jupymd-output-container",
 		});
@@ -111,12 +123,10 @@ export class NotebookUI {
 	cmStyleEl: HTMLStyleElement;
 
 	applyCodeMirrorOverrides() {
-		// Clear existing rules
 		while (this.cmStyleEl.sheet?.cssRules.length) {
 			this.cmStyleEl.sheet.deleteRule(0);
 		}
 
-		// Add new rules safely
 		if (this.cmStyleEl.sheet) {
 			const rules = [
 				`.jupymd-code-container .CodeMirror-line {
@@ -135,7 +145,6 @@ export class NotebookUI {
 				`.jupymd-code-container .CodeMirror-line > span > span {
 					line-height: 1.2 !important;
 				}`,
-				/* New rules for output window */
 				`.jupymd-output {
 					background: none !important;
 					padding: 8px !important;
@@ -152,6 +161,40 @@ export class NotebookUI {
 					padding: 5px !important;
 				}`,
 			];
+
+			const buttonRules = [
+				`.jupymd-button-container {
+					display: flex;
+					gap: 4px;
+					padding: 4px;
+					border-bottom: 1px solid var(--background-modifier-border);
+				}`,
+				`.jupymd-button {
+					background-color: var(--interactive-accent);
+					color: var(--text-on-accent);
+					border: none;
+					border-radius: 4px;
+					padding: 4px 8px;
+					font-size: 12px;
+					cursor: pointer;
+				}`,
+				`.jupymd-button:hover {
+					background-color: var(--interactive-accent-hover);
+				}`,
+				`.jupymd-run-button {
+					background-color: var(--color-green);
+				}`,
+				`.jupymd-clear-button {
+					background-color: var(--color-red);
+				}`,
+			];
+
+			buttonRules.forEach((rule) => {
+				this.cmStyleEl.sheet?.insertRule(
+					rule,
+					this.cmStyleEl.sheet.cssRules.length
+				);
+			});
 
 			rules.forEach((rule) => {
 				this.cmStyleEl.sheet?.insertRule(
@@ -172,20 +215,9 @@ export class NotebookUI {
 			return;
 		}
 
-		const markdownLines = editor.getValue().split("\n");
-		let cellIndex = 0;
-		let foundBlocks = 0;
-		for (let i = 0; i < markdownLines.length; i++) {
-			const line = markdownLines[i];
-			if (line.trim().startsWith("```")) {
-				if (foundBlocks % 2 === 0 && i < codeBlock.startPos) {
-					cellIndex++;
-				}
-				foundBlocks++;
-			}
-		}
-
-		this.clearCellOutput(cellIndex);
+		const cellIndex = getCellIndex(editor, codeBlock);
+		// @ts-ignore
+		await this.clearCellOutput(cellIndex);
 	}
 
 	async clearCellOutput(cellIndex: number) {
@@ -248,6 +280,50 @@ export class NotebookUI {
 		}
 	}
 
+	createCodeBlockButtons(container: HTMLElement, editor: Editor, source: string, ctx: any
+) {
+		const buttonContainer = container.createEl("div", {
+			cls: "jupymd-button-container",
+		});
+
+		const runButton = buttonContainer.createEl("button", {
+			text: "Run",
+			cls: "jupymd-button jupymd-run-button",
+		});
+		runButton.addEventListener("click", () => {
+			const sectionInfo = ctx.getSectionInfo(container);
+			if (!sectionInfo) return;
+
+			const codeBlock = {
+				code: source,
+				startPos: sectionInfo.lineStart,
+				endPos: sectionInfo.lineEnd
+			};
+
+			this.executor.executeCodeBlock(editor, codeBlock);
+		});
+
+		const clearButton = buttonContainer.createEl("button", {
+			text: "Clear",
+			cls: "jupymd-button jupymd-clear-button",
+		});
+		clearButton.addEventListener("click", () => {
+			const sectionInfo = ctx.getSectionInfo(container);
+			if (!sectionInfo) return;
+
+			const codeBlock = {
+				code: source,
+				startPos: sectionInfo.lineStart,
+				endPos: sectionInfo.lineEnd
+			};
+
+			const cellIndex = getCellIndex(editor, codeBlock);
+
+			this.clearCellOutput(cellIndex);
+		});
+		return buttonContainer;
+	}
+
 	async setupCodeBlockProcessor(
 		source: string,
 		el: HTMLElement,
@@ -262,6 +338,13 @@ export class NotebookUI {
 		const container = el.createEl("div", {
 			cls: "jupymd-code-block",
 		});
+
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		const activeFile = this.app.workspace.getActiveFile();
+		if (view && await this.fileSync.isNotebookPaired(activeFile)) {
+			this.createCodeBlockButtons(container, view.editor, source, ctx);
+
+		}
 
 		const codeSection = container.createEl("div", {
 			cls: "jupymd-code-container",
@@ -402,11 +485,7 @@ export class NotebookUI {
 			}
 		} catch (err) {
 			console.error("Error loading outputs:", err);
-			outputSection.empty();
-			outputSection.createEl("div", {
-				text: "Error loading outputs",
-				cls: "jupymd-error",
-			});
+			outputSection.remove();
 		}
 	}
 }
