@@ -4,10 +4,10 @@ import JupyMDPlugin from "../main";
 import { KernelManager } from "./KernelManager";
 import { App, Editor, Notice } from "obsidian";
 import { exec } from "child_process";
-import { getAbsolutePath } from "../utils/helpers";
+import { getAbsolutePath, getCellIndex } from "../utils/helpers";
 import * as fs from "fs/promises";
 import { NotebookUI } from "./NotebookUI";
-import { JupyMDPluginSettings } from "./types";
+import { JupyMDPluginSettings, CodeBlock } from "./types";
 
 export class CodeExecutor {
 	private pythonProcess: ChildProcessWithoutNullStreams | null = null;
@@ -24,14 +24,14 @@ export class CodeExecutor {
 		this.kernelManager = new KernelManager(this.plugin, this.app);
 	}
 
-	async executeCodeBlock(editor: Editor) {
+	async executeCodeBlock(editor: Editor | undefined, codeToRun?: CodeBlock) {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) return;
 
 		const currentPath = await getAbsolutePath(activeFile);
 		if (
 			this.currentNotePath &&
-			this.currentNotePath !== (await currentPath)
+			this.currentNotePath !== currentPath
 		) {
 			new Notice(
 				"Please restart the kernel before executing code in another note.\nUse the 'Restart Python kernel' command."
@@ -39,9 +39,9 @@ export class CodeExecutor {
 			return;
 		}
 
-		this.currentNotePath = await currentPath;
+		this.currentNotePath = currentPath;
 
-		const codeBlock = this.notebookUI.getActiveCodeBlock(editor);
+		const codeBlock = codeToRun || this.notebookUI.getActiveCodeBlock(editor);
 		if (!codeBlock) {
 			new Notice("No code block found at cursor position");
 			return;
@@ -50,19 +50,7 @@ export class CodeExecutor {
 		if (!activeFile) return;
 
 		const ipynbPath = currentPath.replace(/\.md$/, ".ipynb");
-		const markdownLines = editor.getValue().split("\n");
-
-		let cellIndex = 0;
-		let foundBlocks = 0;
-		for (let i = 0; i < markdownLines.length; i++) {
-			const line = markdownLines[i];
-			if (line.trim().startsWith("```")) {
-				if (foundBlocks % 2 === 0 && i < codeBlock.startPos) {
-					cellIndex++;
-				}
-				foundBlocks++;
-			}
-		}
+		const cellIndex = getCellIndex(editor, codeBlock);
 
 		await this.runCodeAndUpdateNotebook({
 			code: codeBlock.code,
@@ -76,10 +64,10 @@ export class CodeExecutor {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) return;
 
-		const currentPath = getAbsolutePath(activeFile);
+		const currentPath = await getAbsolutePath(activeFile);
 		if (
 			this.currentNotePath &&
-			this.currentNotePath !== (await currentPath)
+			this.currentNotePath !== currentPath
 		) {
 			new Notice(
 				"Please restart the kernel before executing code in another note.\nUse the 'Restart Python kernel' command."
@@ -87,18 +75,14 @@ export class CodeExecutor {
 			return;
 		}
 
-		this.currentNotePath = await currentPath;
+		this.currentNotePath = currentPath;
 
 		const fileContent = await this.app.vault.read(activeFile);
 		const lines = fileContent.split("\n");
-		const ipynbPath = (await getAbsolutePath(activeFile)).replace(
-			/\.md$/,
-			".ipynb"
-		);
 
 		let inCodeBlock = false;
 		let blockStart = -1;
-		const codeBlocks: string[] = [];
+		const codeBlocks: CodeBlock[] = [];
 
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i].trim();
@@ -108,7 +92,11 @@ export class CodeExecutor {
 					blockStart = i;
 				} else {
 					inCodeBlock = false;
-					codeBlocks.push(lines.slice(blockStart + 1, i).join("\n"));
+					codeBlocks.push({
+						code: lines.slice(blockStart + 1, i).join("\n"),
+						startPos: blockStart,
+						endPos: i
+					});
 				}
 			}
 		}
@@ -118,14 +106,10 @@ export class CodeExecutor {
 			return;
 		}
 
-		for (let i = 0; i < codeBlocks.length; i++) {
-			await this.runCodeAndUpdateNotebook({
-				code: codeBlocks[i],
-				cellIndex: i,
-				ipynbPath,
-			});
+		for (const codeBlock of codeBlocks) {
+			await this.executeCodeBlock(this.app.workspace.activeEditor?.editor, codeBlock);
 		}
-		this.notebookUI.forceRerender();
+
 		new Notice("All code blocks executed.");
 	}
 
@@ -138,11 +122,13 @@ export class CodeExecutor {
 		cellIndex: number;
 		ipynbPath: string;
 	}) {
-		let stdout = "";
-		let stderr = "";
+		let stdout: string;
+		let stderr: string;
 
 		const result = await this.sendCodeToPython(code);
+		// eslint-disable-next-line prefer-const
 		stdout = result.stdout;
+		// eslint-disable-next-line prefer-const
 		stderr = result.stderr;
 
 		try {
