@@ -104,32 +104,22 @@ export class FileSync {
 
 		if (filePath.endsWith(".md")) {
 			const ipynbPath = filePath.replace(/\.md$/, ".ipynb");
-			if (await this.isNotebookPaired(file)) {
-				exec(`jupytext --sync "${ipynbPath}"`, (error) => {
-					if (error) {
-						console.error(
-							`Failed to sync Markdown file: ${error.message}`
-						);
-					}
-				});
-			}
+			exec(`jupytext --sync "${ipynbPath}"`, (error) => {
+				if (error) {
+					console.error(
+						`Failed to sync Markdown file: ${error.message}`
+					);
+				}
+			});
 		} else if (filePath.endsWith(".ipynb")) {
 			const mdPath = filePath.replace(/\.ipynb$/, ".md");
-			const mdFile = this.app.vault.getAbstractFileByPath(
-				path.relative(this.app.vault.getRoot().path, mdPath)
-			);
-			if (
-				mdFile instanceof TFile &&
-				(await this.isNotebookPaired(mdFile))
-			) {
-				exec(`jupytext --sync "${mdPath}"`, (error) => {
-					if (error) {
-						console.error(
-							`Failed to sync Jupyter Notebook: ${error.message}`
-						);
-					}
-				});
-			}
+			exec(`jupytext --sync "${mdPath}"`, (error) => {
+				if (error) {
+					console.error(
+						`Failed to sync Jupyter Notebook: ${error.message}`
+					);
+				}
+			});
 		}
 	}
 }
