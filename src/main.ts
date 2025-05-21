@@ -18,14 +18,16 @@ export default class JupyMDPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		this.kernelManager = new KernelManager(this, this.app);
 		this.executor = new CodeExecutor(this, this.app);
+		this.notebookUI = new NotebookUI(this.app);
+		this.notebookUI.setExecutor(this.executor);
 
+
+		this.kernelManager = new KernelManager(this, this.app);
 		this.kernelManager.executor = this.executor;
 		this.executor.kernelManager = this.kernelManager;
 
 		this.fileSync = new FileSync(this.app);
-		this.notebookUI = new NotebookUI(this.app);
 
 		registerCommands(this);
 
