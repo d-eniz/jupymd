@@ -41,19 +41,16 @@
     overflow: hidden;
 }
 
-/* Code section - keep background */
 .jupymd-code-container {
     background: var(--background-primary-alt);
     padding: 8px;
 }
 
-/* Base output styles (will be overridden) */
 .jupymd-output {
     padding: 8px;
     border-top: 1px solid var(--background-modifier-border);
 }
 
-/* Base styles that can be overridden by our dynamic rules */
 .jupymd-code-container .CodeMirror {
     --line-height-normal: 1.2;
 }
@@ -61,4 +58,27 @@
 .jupymd-code-container .CodeMirror pre {
     padding: 0;
     margin: 0;
+}
+
+.jupymd-output pre,
+.jupymd-output code {
+	background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.CodeMirror,
+.CodeMirror-scroll,
+.CodeMirror-sizer,
+.CodeMirror-lines,
+.CodeMirror-code,
+.CodeMirror-line {
+    border: none !important;
+    box-shadow: none !important;
+    background: none !important;
+    margin-top: 8px;
+    margin-bottom: 12px;
 }
