@@ -12,7 +12,9 @@
 		"isolatedModules": true,
 		"strictNullChecks": true,
 		"lib": ["DOM", "ES5", "ES6", "ES7"],
-    "rootDir": "src"
-	},
+		"jsx": "react-jsx",
+    "rootDir": "src",
+      "allowSyntheticDefaultImports": true
+    },
 	"include": ["src/**/*.ts"]
 }

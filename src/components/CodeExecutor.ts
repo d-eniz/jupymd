@@ -28,7 +28,7 @@ export class CodeExecutor {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) return;
 
-		const currentPath = await getAbsolutePath(activeFile);
+		const currentPath = getAbsolutePath(activeFile);
 		if (
 			this.currentNotePath &&
 			this.currentNotePath !== currentPath
@@ -57,14 +57,13 @@ export class CodeExecutor {
 			cellIndex,
 			ipynbPath,
 		});
-		new Notice("Notebook output updated.");
 	}
 
 	async executeAllCodeBlocks() {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) return;
 
-		const currentPath = await getAbsolutePath(activeFile);
+		const currentPath = getAbsolutePath(activeFile);
 		if (
 			this.currentNotePath &&
 			this.currentNotePath !== currentPath
@@ -164,7 +163,6 @@ export class CodeExecutor {
 					JSON.stringify(notebook, null, 2)
 				);
 				exec(`jupytext --sync "${ipynbPath}"`);
-				this.notebookUI.forceRerender();
 			}
 		} catch (err) {
 			console.error("Error updating notebook:", err);
