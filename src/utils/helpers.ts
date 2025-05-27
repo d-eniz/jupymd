@@ -1,17 +1,9 @@
-import { promises as fs } from "fs";
-import * as os from "os";
+import {promises as fs} from "fs";
 import * as path from "path";
-import {FileSystemAdapter, TFile, Editor, MarkdownView} from "obsidian";
-import { CodeBlock } from "../components/types";
+import {FileSystemAdapter, TFile, Editor} from "obsidian";
+import {CodeBlock} from "../components/types";
 
-export async function createTempFile(contents: string, prefix: string) {
-	const tempDir = os.tmpdir();
-	const filePath = path.join(tempDir, `${prefix}_${Date.now()}`);
-	await fs.writeFile(filePath, contents, "utf-8");
-	return filePath;
-}
-
-export async function getAbsolutePath(file: TFile): Promise<string> {
+export function getAbsolutePath(file: TFile): string {
 	const adapter = this.app.vault.adapter;
 	if (adapter instanceof FileSystemAdapter) {
 		const vaultPath = adapter.getBasePath();
@@ -36,4 +28,16 @@ export function getCellIndex(editor: Editor | undefined, codeBlock: CodeBlock) {
 		}
 	}
 	return cellIndex;
+}
+
+export async function isNotebookPaired(file: any): Promise<boolean> {
+	const mdPath = getAbsolutePath(file);
+	const ipynbPath = mdPath.replace(/\.md$/, ".ipynb");
+
+	try {
+		await fs.access(ipynbPath, fs.constants.F_OK);
+		return true;
+	} catch (error) {
+		return false;
+	}
 }
