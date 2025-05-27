@@ -15,3 +15,11 @@ export type CodeBlock = {
 	startPos: number;
 	endPos: number;
 };
+
+export type PythonBlockProps = {
+	code?: string;
+	path?: string;
+	index?: number;
+	executor?: any;
+	plugin?: any;
+}
