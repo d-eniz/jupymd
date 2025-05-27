@@ -1,23 +1,10 @@
 import { App, Notice, TAbstractFile, TFile } from "obsidian";
 import { exec } from "child_process";
-import { getAbsolutePath } from "../utils/helpers";
-import * as fs from "fs/promises";
-import * as path from "path";
+import { getAbsolutePath, isNotebookPaired } from "../utils/helpers";
 
 export class FileSync {
 	constructor(private app: App) {}
 
-	async isNotebookPaired(file: any): Promise<boolean> {
-		const mdPath = await getAbsolutePath(file);
-		const ipynbPath = mdPath.replace(/\.md$/, ".ipynb");
-
-		try {
-			await fs.access(ipynbPath, fs.constants.F_OK);
-			return true;
-		} catch (error) {
-			return false;
-		}
-	}
 
 	async createNotebook() {
 		const activeFile = this.app.workspace.getActiveFile();
@@ -26,10 +13,10 @@ export class FileSync {
 			return;
 		}
 
-		const mdPath = await getAbsolutePath(activeFile);
-		const ipynbPath = (await mdPath).replace(/\.md$/, ".ipynb");
+		const mdPath = getAbsolutePath(activeFile);
+		const ipynbPath = mdPath.replace(/\.md$/, ".ipynb");
 
-		if (await this.isNotebookPaired(activeFile)) {
+		if (await isNotebookPaired(activeFile)) {
 			new Notice("Notebook is already paired with this note.");
 			return;
 		}
@@ -59,13 +46,13 @@ export class FileSync {
 		}
 
 		// Check if the notebook is paired
-		if (!(await this.isNotebookPaired(activeFile))) {
+		if (!(await isNotebookPaired(activeFile))) {
 			new Notice("No paired Jupyter Notebook found for this note.");
 			return;
 		}
 
 		const mdPath = getAbsolutePath(activeFile);
-		const ipynbPath = (await mdPath).replace(/\.md$/, ".ipynb");
+		const ipynbPath = mdPath.replace(/\.md$/, ".ipynb");
 
 		let command: string;
 		let editorName: string;
@@ -83,7 +70,7 @@ export class FileSync {
 				throw new Error(`Unsupported editor: ${editor}`);
 		}
 
-		// Open the .ipynb file in editor
+		// Open the .ipynb file in the editor
 		exec(command, (error) => {
 			if (error) {
 				new Notice(
@@ -100,7 +87,7 @@ export class FileSync {
 			return;
 		}
 
-		const filePath = await getAbsolutePath(file);
+		const filePath = getAbsolutePath(file);
 
 		if (filePath.endsWith(".md")) {
 			const ipynbPath = filePath.replace(/\.md$/, ".ipynb");
