@@ -42,5 +42,16 @@ export class JupyMDSettingTab extends PluginSettingTab {
 					this.display();
 				});
 			});
+
+		new Setting(containerEl)
+			.setName("Jupyter notebook editor launch command")
+			.setDesc("Specify the command to launch Jupyter notebooks in your preferred editor (e.g., 'code' for VS Code, 'jupyter-lab' for Jupyter Lab)")
+			.addText((text) => {
+				text.setValue(this.plugin.settings.notebookEditorCommand)
+					.onChange(async (value) => {
+						this.plugin.settings.notebookEditorCommand = value;
+						await this.plugin.saveSettings();
+					});
+			})
 	}
 }

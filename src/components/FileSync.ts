@@ -38,14 +38,13 @@ export class FileSync {
 		});
 	}
 
-	async openNotebookInEditor(editor: "vscode" | "jupyter-lab") {
+	async openNotebookInEditor(editor: string) {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) {
 			new Notice("No active note found.");
 			return;
 		}
 
-		// Check if the notebook is paired
 		if (!(await isNotebookPaired(activeFile))) {
 			new Notice("No paired Jupyter Notebook found for this note.");
 			return;
@@ -54,31 +53,16 @@ export class FileSync {
 		const mdPath = getAbsolutePath(activeFile);
 		const ipynbPath = mdPath.replace(/\.md$/, ".ipynb");
 
-		let command: string;
-		let editorName: string;
+		const command = `${editor} "${ipynbPath}"`;
 
-		switch (editor) {
-			case "vscode":
-				command = `code "${ipynbPath}"`;
-				editorName = "VS Code";
-				break;
-			case "jupyter-lab":
-				command = `python -m jupyterlab "${ipynbPath}"`;
-				editorName = "Jupyter Lab";
-				break;
-			default:
-				throw new Error(`Unsupported editor: ${editor}`);
-		}
-
-		// Open the .ipynb file in the editor
 		exec(command, (error) => {
 			if (error) {
 				new Notice(
-					`Failed to open notebook in ${editorName}: ${error.message}`
+					`Failed to open notebook in editor: ${error.message}`
 				);
 				return;
 			}
-			new Notice(`Opened notebook in ${editorName}: ${ipynbPath}`);
+			new Notice(`Opened notebook in editor: ${ipynbPath}`);
 		});
 	}
 
