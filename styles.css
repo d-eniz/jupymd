@@ -1,84 +1,73 @@
-.CodeMirror span[style*="visibility: hidden"] {
-    display: none !important;
+.code-container {
+	font-family: monospace;
+	border-radius: 6px;
+	overflow: hidden;
+	background-color: #f5f5f5;
 }
 
-.CodeMirror-measure {
-    visibility: hidden !important;
-    position: absolute !important;
-    left: -9999px !important;
-    top: -9999px !important;
-    width: 0 !important;
-    height: 0 !important;
-    overflow: hidden !important;
+.code-top-bar {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	background-color: #e0e0e0;
+	padding: 0.15em 0.75em;
 }
 
-.jupymd-code-container .CodeMirror {
-    pointer-events: none;
+.code-buttons {
+	display: flex;
+	gap: 0.5em;
 }
 
-.jupymd-code-container .CodeMirror-scrollbar-filler,
-.jupymd-code-container .CodeMirror-gutter-filler,
-.jupymd-code-container .CodeMirror-vscrollbar,
-.jupymd-code-container .CodeMirror-hscrollbar,
-.jupymd-code-container .CodeMirror-cursors,
-.jupymd-code-container .CodeMirror-measure,
-.jupymd-code-container .CodeMirror-gutters,
-.jupymd-code-container .CodeMirror textarea {
-    display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    width: 0 !important;
-    overflow: hidden !important;
-    pointer-events: none !important;
-    position: absolute !important;
-    left: -9999px !important;
+.code-lang-label {
+	font-family: 'Inter', sans-serif;
+	color: #666;
+	font-size: 0.7em;
+	padding: 0.5em;
 }
 
-.jupymd-code-block {
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 4px;
-    margin: 1em 0;
-    overflow: hidden;
+.code-body {
+	margin: 0;
+	padding: 0.75em;
+	white-space: pre-wrap;
+	border-top-left-radius: 0 !important;
+	border-top-right-radius: 0 !important;
+	background-color: #f5f5f5;
 }
 
-.jupymd-code-container {
-    background: var(--background-primary-alt);
-    padding: 8px;
+.code-output {
+	font-family: monospace;
+	font-weight: bold;
+	padding: 0.75em;
+	background-color: #f8f8f8;
+	overflow: auto;
 }
 
-.jupymd-output {
-    padding: 8px;
-    border-top: 1px solid var(--background-modifier-border);
+.icon-button {
+	box-shadow: none !important;
+	border: none !important;
+	outline: none !important;
+	background-color: transparent !important;,
+	box-shadow: none !important;
+	padding: 0 !important;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 
-.jupymd-code-container .CodeMirror {
-    --line-height-normal: 1.2;
+.icon {
+	width: 15px;
+	height: 15px;
 }
 
-.jupymd-code-container .CodeMirror pre {
-    padding: 0;
-    margin: 0;
+.grey-icon {
+	transition: color 0.2s;
+	color: grey;
 }
 
-.jupymd-output pre,
-.jupymd-output code {
-	background: none !important;
-    border: none !important;
-    box-shadow: none !important;
-    background: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
+.grey-icon:hover {
+	cursor: pointer;
+	transition: color 0.2s;
+	color: #333;
 }
 
-.CodeMirror,
-.CodeMirror-scroll,
-.CodeMirror-sizer,
-.CodeMirror-lines,
-.CodeMirror-code,
-.CodeMirror-line {
-    border: none !important;
-    box-shadow: none !important;
-    background: none !important;
-    margin-top: 8px;
-    margin-bottom: 12px;
-}
+
