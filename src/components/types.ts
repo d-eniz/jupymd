@@ -1,22 +1,17 @@
 export type JupyMDPluginSettings = {
-	defaultKernel: string;
-	availableKernels: string[];
-	usePersistentPython: boolean;
 	notebookEditorCommand: string;
+	enableCodeBlocks: boolean;
 }
 
 export const DEFAULT_SETTINGS: JupyMDPluginSettings = {
-	defaultKernel: "python3",
-	availableKernels: ["python3"],
-	usePersistentPython: true,
 	notebookEditorCommand: "jupyter-lab",
+	enableCodeBlocks: true,
 };
 
 export type CodeBlock = {
 	code: string;
-	startPos: number;
-	endPos: number;
-};
+	cellIndex: number;
+}
 
 export type PythonBlockProps = {
 	code?: string;
