@@ -1,10 +1,10 @@
-import { App, Notice, TAbstractFile, TFile } from "obsidian";
-import { exec } from "child_process";
-import { getAbsolutePath, isNotebookPaired } from "../utils/helpers";
+import {App, Notice, TFile, MarkdownView} from "obsidian";
+import {exec} from "child_process";
+import {getAbsolutePath, isNotebookPaired} from "../utils/helpers";
 
 export class FileSync {
-	constructor(private app: App) {}
-
+	constructor(private app: App) {
+	}
 
 	async createNotebook() {
 		const activeFile = this.app.workspace.getActiveFile();
@@ -33,6 +33,12 @@ export class FileSync {
 					return;
 				}
 
+				const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+				const leaf = this.app.workspace.getLeavesOfType(
+					view?.getViewType() ?? ""
+				)[0];
+				(leaf as any).rebuildView(); // Refresh
+
 				new Notice(`Notebook created and paired: ${ipynbPath}`);
 			});
 		});
@@ -46,7 +52,6 @@ export class FileSync {
 		}
 
 		if (!(await isNotebookPaired(activeFile))) {
-			new Notice("No paired Jupyter Notebook found for this note.");
 			return;
 		}
 
@@ -66,31 +71,22 @@ export class FileSync {
 		});
 	}
 
-	async syncFiles(file: TAbstractFile) {
-		if (!(file instanceof TFile)) {
+	async syncFiles(file: TFile) {
+
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!await isNotebookPaired(activeFile)) {
 			return;
 		}
 
 		const filePath = getAbsolutePath(file);
 
-		if (filePath.endsWith(".md")) {
-			const ipynbPath = filePath.replace(/\.md$/, ".ipynb");
-			exec(`jupytext --sync "${ipynbPath}"`, (error) => {
-				if (error) {
-					console.error(
-						`Failed to sync Markdown file: ${error.message}`
-					);
-				}
-			});
-		} else if (filePath.endsWith(".ipynb")) {
-			const mdPath = filePath.replace(/\.ipynb$/, ".md");
-			exec(`jupytext --sync "${mdPath}"`, (error) => {
-				if (error) {
-					console.error(
-						`Failed to sync Jupyter Notebook: ${error.message}`
-					);
-				}
-			});
-		}
+		const ipynbPath = filePath.replace(/\.md$/, ".ipynb");
+		exec(`jupytext --sync "${ipynbPath}"`, (error) => {
+			if (error) {
+				console.error(
+					`Failed to sync Markdown file: ${error.message}`
+				);
+			}
+		});
 	}
 }
