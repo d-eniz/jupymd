@@ -1,8 +1,29 @@
+![jupymd-logo](assets/jupymd-logo-wide.png)
+
 # JupyMD for Obsidian
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/d-eniz/jupymd/total?style=flat-square&logo=obsidian&color=%235b3fbf)
+![GitHub Release](https://img.shields.io/github/v/release/d-eniz/jupymd?style=flat-square&color=%235b3fbf)
 
 Enables Jupyter notebook functionality in Obsidian. Make markdown files behave like `.ipynb` notebooks, with live code execution, rich output rendering, and bidirectional syncing between `.md` and `.ipynb` files.
 
-![plugin.gif](assets/plugin.gif)
+## Integrate your programming notes into Obsidian
+
+With JupyMD you can:
+- Run Python code
+- Create plots with `matplotlib`
+- Conduct data analysis with `pandas` dataframes
+- Build machine learning models with `sklearn` and `pytorch`
+- And much more
+
+... all in your Obsidian vault!
+
+## Use-cases:
+
+### Machine learning workflow
+![ml-workflow](assets/example-ml-workflow.gif)
+
+### Visualising fractals with `matplotlib`
+![mandelbrot-set](assets/mandelbrot-set.png)
 
 ## Features
 
@@ -11,7 +32,7 @@ Enables Jupyter notebook functionality in Obsidian. Make markdown files behave l
 - **Execute Code** – Run code blocks in Obsidian with output captured below each block
 - **True Jupyter Sync** – Executed code blocks automatically update output metadata in linked `.ipynb` file
 - **Persistent Outputs** – Executed code outputs stay visible after restart and sync to `.ipynb` file
-- **Kernel Management** – Use existing Python kernels in your system which stay persistent across code block executions within a file 
+- **Rich Output** – Support for `matplotlib` plots and `pandas` dataframe outputs
 
 ## Prerequisites
 
@@ -21,7 +42,16 @@ Enables Jupyter notebook functionality in Obsidian. Make markdown files behave l
 - [Jupytext](https://github.com/mwouts/jupytext)
   `pip install jupytext`
 
+## Getting started
+
+Simply execute the following command on a note you want Jupyter notebook capability on:
+> `JupyMD: Create Jupyter notebook from note`
+
+This will create an `.ipynb` file with the same file name as the current note on the file directory, and will transform your Python code blocks into interactive code blocks. Your note will now behave like a Jupyter notebook, and sync its contents automatically to the `.ipynb` file. You may choose to ignore the created `.ipynb` file completely, as its functionality will be mirrored in Obsidian.
+
 > [!NOTE]
 > JupyMD currently supports Python execution only.
 >
 > Future versions will expand language support, though this feature is not yet in active development. Your help is appreciated, feel free to open an issue or submit a pull request if you would like to contribute!
+
+JupyMD is an independent project and not affiliated with Project Jupyter or Obsidian.
