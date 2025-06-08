@@ -1,7 +1,6 @@
 import {promises as fs} from "fs";
 import * as path from "path";
-import {FileSystemAdapter, TFile, Editor} from "obsidian";
-import {CodeBlock} from "../components/types";
+import {FileSystemAdapter, TFile} from "obsidian";
 
 export function getAbsolutePath(file: TFile): string {
 	const adapter = this.app.vault.adapter;
@@ -11,23 +10,6 @@ export function getAbsolutePath(file: TFile): string {
 	} else {
 		throw new Error("Cannot get base path: unsupported adapter type.");
 	}
-}
-
-export function getCellIndex(editor: Editor | undefined, codeBlock: CodeBlock) {
-	// @ts-ignore
-	const markdownLines = editor.getValue().split("\n");
-	let cellIndex = 0;
-	let foundBlocks = 0;
-	for (let i = 0; i < markdownLines.length; i++) {
-		const line = markdownLines[i];
-		if (line.trim().startsWith("```")) {
-			if (foundBlocks % 2 === 0 && i < codeBlock.startPos) {
-				cellIndex++;
-			}
-			foundBlocks++;
-		}
-	}
-	return cellIndex;
 }
 
 export async function isNotebookPaired(file: any): Promise<boolean> {
