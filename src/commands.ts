@@ -1,8 +1,8 @@
-import {Editor} from "obsidian";
 import JupyMDPlugin from "./main";
 
 export function registerCommands(plugin: JupyMDPlugin) {
-	const {fileSync, kernelManager} = plugin;
+	const {fileSync} = plugin;
+	const {executor} = plugin;
 
 	plugin.addCommand({
 		id: "create-jupyter-notebook",
@@ -19,6 +19,6 @@ export function registerCommands(plugin: JupyMDPlugin) {
 	plugin.addCommand({
 		id: "restart-python-kernel",
 		name: "Restart Python kernel",
-		callback: () => kernelManager.restartKernel(),
+		callback: () => executor.restartKernel(),
 	});
 }
