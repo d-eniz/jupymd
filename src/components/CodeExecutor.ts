@@ -1,30 +1,25 @@
-import { ChildProcessWithoutNullStreams } from "child_process";
-import { spawn } from "child_process";
 import JupyMDPlugin from "../main";
-import { KernelManager } from "./KernelManager";
-import { App, Editor, Notice } from "obsidian";
-import { exec } from "child_process";
-import { getAbsolutePath, getCellIndex } from "../utils/helpers";
+import {App, Notice} from "obsidian";
+import {exec} from "child_process";
+import {getAbsolutePath} from "../utils/helpers";
+import {CodeBlock} from "./types";
 import * as fs from "fs/promises";
-import { NotebookUI } from "./NotebookUI";
-import { JupyMDPluginSettings, CodeBlock } from "./types";
+import {spawn, ChildProcess} from "child_process";
 
 export class CodeExecutor {
-	private pythonProcess: ChildProcessWithoutNullStreams | null = null;
-	private stdoutBuffer = "";
-	private stderrBuffer = "";
 	private currentNotePath: string | null = null;
-	private notebookUI: NotebookUI;
-	private settings: JupyMDPluginSettings;
-	kernelManager: KernelManager;
+	private pythonProcess: ChildProcess | null = null;
+	private isProcessReady= false;
+	private executionQueue: Array<{
+		code: string;
+		resolve: (result: any) => void;
+		reject: (error: any) => void;
+	}> = [];
 
 	constructor(private plugin: JupyMDPlugin, private app: App) {
-		this.notebookUI = new NotebookUI(this.app);
-		this.settings = this.plugin.settings;
-		this.kernelManager = new KernelManager(this.plugin, this.app);
 	}
 
-	async executeCodeBlock(editor: Editor | undefined, codeToRun?: CodeBlock) {
+	async executeCodeBlock(codeBlock: CodeBlock) {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) return;
 
@@ -40,214 +35,296 @@ export class CodeExecutor {
 		}
 
 		this.currentNotePath = currentPath;
-
-		const codeBlock = codeToRun || this.notebookUI.getActiveCodeBlock(editor);
-		if (!codeBlock) {
-			new Notice("No code block found at cursor position");
-			return;
-		}
 
 		if (!activeFile) return;
 
 		const ipynbPath = currentPath.replace(/\.md$/, ".ipynb");
-		const cellIndex = getCellIndex(editor, codeBlock);
 
 		await this.runCodeAndUpdateNotebook({
-			code: codeBlock.code,
-			cellIndex,
+			codeBlock: codeBlock,
 			ipynbPath,
 		});
 	}
 
-	async executeAllCodeBlocks() {
-		const activeFile = this.app.workspace.getActiveFile();
-		if (!activeFile) return;
-
-		const currentPath = getAbsolutePath(activeFile);
-		if (
-			this.currentNotePath &&
-			this.currentNotePath !== currentPath
-		) {
-			new Notice(
-				"Please restart the kernel before executing code in another note.\nUse the 'Restart Python kernel' command."
-			);
-			return;
-		}
-
-		this.currentNotePath = currentPath;
-
-		const fileContent = await this.app.vault.read(activeFile);
-		const lines = fileContent.split("\n");
-
-		let inCodeBlock = false;
-		let blockStart = -1;
-		const codeBlocks: CodeBlock[] = [];
-
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i].trim();
-			if (line.startsWith("```")) {
-				if (!inCodeBlock) {
-					inCodeBlock = true;
-					blockStart = i;
-				} else {
-					inCodeBlock = false;
-					codeBlocks.push({
-						code: lines.slice(blockStart + 1, i).join("\n"),
-						startPos: blockStart,
-						endPos: i
-					});
-				}
-			}
-		}
-
-		if (codeBlocks.length === 0) {
-			new Notice("No code blocks found.");
-			return;
-		}
-
-		for (const codeBlock of codeBlocks) {
-			await this.executeCodeBlock(this.app.workspace.activeEditor?.editor, codeBlock);
-		}
-
-		new Notice("All code blocks executed.");
-	}
-
 	async runCodeAndUpdateNotebook({
-		code,
-		cellIndex,
-		ipynbPath,
-	}: {
-		code: string;
-		cellIndex: number;
+									   codeBlock,
+									   ipynbPath,
+								   }: {
+		codeBlock: CodeBlock;
 		ipynbPath: string;
 	}) {
-		let stdout: string;
-		let stderr: string;
-
-		const result = await this.sendCodeToPython(code);
-		// eslint-disable-next-line prefer-const
-		stdout = result.stdout;
-		// eslint-disable-next-line prefer-const
-		stderr = result.stderr;
-
 		try {
+			const result = await this.sendCodeToPython(codeBlock.code);
+			const {stdout, stderr, imageData} = result;
+
 			const raw = await fs.readFile(ipynbPath, "utf-8");
 			const notebook = JSON.parse(raw);
-			const cell = notebook.cells.filter(
-				(c: { cell_type: string }) => c.cell_type === "code"
-			)[cellIndex];
 
-			if (cell) {
-				cell.outputs = [];
-
-				if (stdout) {
-					const lines = stdout.split(/(?<=\S)(?=\S)/g).map(line => line.trim());
-
-					cell.outputs.push({
-						output_type: "stream",
-						name: "stdout",
-						text: lines,
-					});
-				}
-
-				if (stderr && stderr.trim()) {
-					cell.outputs.push({
-						output_type: "stream",
-						name: "stderr",
-						text: stderr.split("\n"),
-					});
-				}
-
-				await fs.writeFile(
-					ipynbPath,
-					JSON.stringify(notebook, null, 2)
-				);
-				exec(`jupytext --sync "${ipynbPath}"`);
+			const cell = notebook.cells.filter((cell) => cell.cell_type === "code")[codeBlock.cellIndex];
+			if (!cell) {
+				console.warn(`Cell with index ${codeBlock.cellIndex} not found.`);
+				return;
 			}
+
+			const outputs: any[] = [];
+
+			if (stdout && stdout.trim()) {
+				outputs.push({
+					output_type: "stream",
+					name: "stdout",
+					text: stdout.endsWith("\n") ? stdout : stdout + "\n",
+				});
+			}
+
+			if (stderr && stderr.trim()) {
+				outputs.push({
+					output_type: "stream",
+					name: "stderr",
+					text: stderr.endsWith("\n") ? stderr : stderr + "\n",
+				});
+			}
+
+			if (imageData && imageData.length > 0) {
+				outputs.push({
+					output_type: "display_data",
+					data: {
+						"image/png": imageData,
+					},
+					metadata: {},
+				});
+			}
+
+			cell.outputs = outputs;
+			cell.execution_count = (cell.execution_count ?? 0) + 1;
+
+			if (!cell.metadata) cell.metadata = {};
+			cell.metadata.jupyter = {is_executing: false};
+			await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
+
+			exec(`jupytext --sync "${ipynbPath}"`);
 		} catch (err) {
 			console.error("Error updating notebook:", err);
 		}
 	}
 
-	async startPythonProcess() {
-		if (
-			this.pythonProcess &&
-			this.kernelManager.currentKernel === this.settings.defaultKernel
-		) {
+	private async initializePythonProcess(): Promise<void> {
+		if (this.pythonProcess && !this.pythonProcess.killed) {
 			return;
 		}
 
-		if (this.pythonProcess) {
-			await this.stopPythonProcess();
-		}
+		return new Promise((resolve, reject) => {
+			const initCode = `
+import sys
+import io
+import base64
+import traceback
+import json
+from contextlib import redirect_stdout, redirect_stderr
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use("Agg")
 
-		this.kernelManager.currentKernel = this.settings.defaultKernel;
+def execute_code(code_str):
+    _stdout = io.StringIO()
+    _stderr = io.StringIO()
+    _img_buf = io.BytesIO()
+    _img_data = ""
+    
+    _fig_before = plt.get_fignums()
+    
+    try:
+        try:
+            compiled_code = compile(code_str, '<string>', 'exec')
+        except SyntaxError as e:
+            _stderr.write(f"SyntaxError: {e.msg}\\n")
+            if e.text:
+                _stderr.write(f"Line {e.lineno}: {e.text}")
+            raise e
+        except Exception as e:
+            _stderr.write(f"Compilation error: {str(e)}\\n")
+            raise e
 
-		await this.kernelManager.getKernelCommand(
-			this.kernelManager.currentKernel
-		);
+        try:
+            with redirect_stdout(_stdout), redirect_stderr(_stderr):
+                exec(compiled_code, globals(), globals())
+                
+            _fig_after = plt.get_fignums()
+            if len(_fig_after) > len(_fig_before):
+                fig = plt.gcf()
+                fig.tight_layout(pad=0)
+                plt.savefig(_img_buf, format="png", bbox_inches='tight', pad_inches=0, dpi=100)
+                _img_buf.seek(0)
+                _img_data = base64.b64encode(_img_buf.read()).decode("utf-8")
+                plt.close('all')
+                
+        except Exception as e:
+            _stderr.write("".join(traceback.format_exception(type(e), e, e.__traceback__)))
+            
+    except Exception as e:
+        _stderr.write("".join(traceback.format_exception(type(e), e, e.__traceback__)))
+    
+    result = {
+        "stdout": _stdout.getvalue(),
+        "stderr": _stderr.getvalue(),
+        "imageData": _img_data
+    }
+    
+    print("###RESULT###")
+    print(json.dumps(result))
+    print("###END###")
+    sys.stdout.flush()
 
-		this.pythonProcess = spawn("python", ["-i", "-q"], {
-			// ! CRUCIAL, -i -> INTERACTIVE MODE; -q -> QUIET MODE
-			stdio: ["pipe", "pipe", "pipe"],
-		});
+print("PYTHON_READY")
+sys.stdout.flush()
 
-		this.pythonProcess.stdout.setEncoding("utf-8");
-		this.pythonProcess.stdout.on("data", (data) => {
-			this.stdoutBuffer += data.toString();
-		});
+while True:
+    try:
+        line = input()
+        if line == "EXIT":
+            break
+        elif line.startswith("EXEC:"):
+            code_to_exec = line[5:]
+            if code_to_exec == "MULTILINE":
+                code_lines = []
+                while True:
+                    code_line = input()
+                    if code_line == "END_CODE":
+                        break
+                    code_lines.append(code_line)
+                code_to_exec = "\\n".join(code_lines)
+            
+            execute_code(code_to_exec)
+    except EOFError:
+        break
+    except Exception as e:
+        error_result = {
+            "stdout": "",
+            "stderr": f"Python process error: {str(e)}",
+            "imageData": ""
+        }
+        print("###RESULT###")
+        print(json.dumps(error_result))
+        print("###END###")
+        sys.stdout.flush()
+`;
 
-		this.pythonProcess.stderr.setEncoding("utf-8");
-		this.pythonProcess.stderr.on("data", (data) => {
-			this.stderrBuffer += data;
+			this.pythonProcess = spawn("python", ["-c", initCode]);
+
+			let initOutput = "";
+
+			this.pythonProcess.stdout?.setEncoding("utf-8");
+			this.pythonProcess.stdout?.on("data", (data) => {
+				const output = data.toString();
+				initOutput += output;
+
+				if (!this.isProcessReady && output.includes("PYTHON_READY")) {
+					this.isProcessReady = true;
+					resolve();
+					return;
+				}
+
+				if (this.executionQueue.length > 0 && output.includes("###END###")) {
+					const currentExecution = this.executionQueue.shift();
+					if (currentExecution) {
+						try {
+							const resultMatch = initOutput.match(/###RESULT###\s*(.*?)\s*###END###/s);
+							if (resultMatch) {
+								const result = JSON.parse(resultMatch[1]);
+								currentExecution.resolve(result);
+							} else {
+								currentExecution.reject(new Error("Failed to parse execution result"));
+							}
+						} catch (e) {
+							currentExecution.reject(e);
+						}
+					}
+					initOutput = "";
+				}
+			});
+
+			this.pythonProcess.stderr?.setEncoding("utf-8");
+			this.pythonProcess.stderr?.on("data", (data) => {
+				console.error("Python process stderr:", data.toString());
+			});
+
+			this.pythonProcess.on("close", (code) => {
+				console.log("Python process closed with code:", code);
+				this.pythonProcess = null;
+				this.isProcessReady = false;
+				while (this.executionQueue.length > 0) {
+					const execution = this.executionQueue.shift();
+					if (execution) {
+						execution.reject(new Error("Python process closed unexpectedly"));
+					}
+				}
+			});
+
+			this.pythonProcess.on("error", (error) => {
+				console.error("Python process error:", error);
+				reject(error);
+			});
+
+			setTimeout(() => {
+				if (!this.isProcessReady) {
+					reject(new Error("Python process initialization timeout"));
+				}
+			}, 10000);
 		});
 	}
 
-	async stopPythonProcess() {
+	async sendCodeToPython(code: string): Promise<{
+		stdout: string;
+		stderr: string;
+		imageData?: string;
+	}> {
+		await this.initializePythonProcess();
+
+		return new Promise((resolve, reject) => {
+			this.executionQueue.push({code, resolve, reject});
+
+			if (!this.pythonProcess || !this.pythonProcess.stdin) {
+				reject(new Error("Python process not available"));
+				return;
+			}
+
+			if (code.includes('\n')) {
+				this.pythonProcess.stdin.write("EXEC:MULTILINE\n");
+				const lines = code.split('\n');
+				for (const line of lines) {
+					this.pythonProcess.stdin.write(line + "\n");
+				}
+				this.pythonProcess.stdin.write("END_CODE\n");
+			} else {
+				this.pythonProcess.stdin.write(`EXEC:${code}\n`);
+			}
+		});
+	}
+
+	async restartKernel(): Promise<void> {
 		if (this.pythonProcess) {
-			this.pythonProcess.stdin.write("exit()\n");
+			this.pythonProcess.stdin?.write("EXIT\n");
 			this.pythonProcess.kill();
 			this.pythonProcess = null;
-			this.currentNotePath = null;
 		}
+		this.isProcessReady = false;
+		this.currentNotePath = null;
+
+		while (this.executionQueue.length > 0) {
+			const execution = this.executionQueue.shift();
+			if (execution) {
+				execution.reject(new Error("Kernel restarted"));
+			}
+		}
+
+		new Notice("Python kernel restarted");
 	}
 
-	async sendCodeToPython(
-		code: string
-	): Promise<{ stdout: string; stderr: string }> {
-		if (!this.pythonProcess) await this.startPythonProcess();
-
-		this.stdoutBuffer = "";
-		this.stderrBuffer = "";
-
-		const END_MARKER = "###END###";
-		if (this.pythonProcess && this.pythonProcess.stdin) {
-			this.pythonProcess.stdin.write(
-				code + `\nprint("${END_MARKER}", flush=True)\n`
-			);
-		} else {
-			throw new Error(
-				"Python process is not running or stdin is unavailable."
-			);
+	cleanup(): void {
+		if (this.pythonProcess) {
+			this.pythonProcess.stdin?.write("EXIT\n");
+			this.pythonProcess.kill();
+			this.pythonProcess = null;
 		}
-
-		return new Promise((resolve) => {
-			const checkFinished = () => {
-				if (this.stdoutBuffer.includes(END_MARKER)) {
-					const stdout = this.stdoutBuffer
-						.split(END_MARKER)[0]
-						.trim();
-
-					const stderr = this.stderrBuffer
-						.replace(/>>>\s*/g, "") // Remove >>> and any space after it
-						.trim();
-
-					resolve({ stdout, stderr });
-				} else {
-					setTimeout(checkFinished, 50);
-				}
-			};
-			checkFinished();
-		});
+		this.isProcessReady = false;
 	}
 }
