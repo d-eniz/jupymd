@@ -13,7 +13,7 @@ With JupyMD you can:
 - Create plots with `matplotlib`
 - Conduct data analysis with `pandas` dataframes
 - Build machine learning models with `sklearn` and `pytorch`
-- And much more
+- And much of what you would typically use a Jupyter notebook for
 
 ... all in your Obsidian vault!
 
@@ -29,7 +29,7 @@ With JupyMD you can:
 
 - **Notebook Conversion** – Convert existing notes in Obsidian to `.ipynb` files via Jupytext
 - **Bidirectional Updates** – Changes in Obsidian or Jupyter automatically sync between `.md` and `.ipynb` files
-- **Execute Code** – Run code blocks in Obsidian with output captured below each block
+- **Execute Code** – Run code blocks in Obsidian with output captured below each block, regardless of viewing mode
 - **True Jupyter Sync** – Executed code blocks automatically update output metadata in linked `.ipynb` file
 - **Persistent Outputs** – Executed code outputs stay visible after restart and sync to `.ipynb` file
 - **Rich Output** – Support for `matplotlib` plots and `pandas` dataframe outputs
@@ -44,10 +44,16 @@ With JupyMD you can:
 
 ## Getting started
 
+Download the plugin through the [Obsidian community plugin browser](obsidian://show-plugin?id=jupymd) and enable it. If not yet installed, install Jupyter notebook and Jupytext through pip.
+
 Simply execute the following command on a note you want Jupyter notebook capability on:
 > `JupyMD: Create Jupyter notebook from note`
 
 This will create an `.ipynb` file with the same file name as the current note on the file directory, and will transform your Python code blocks into interactive code blocks. Your note will now behave like a Jupyter notebook, and sync its contents automatically to the `.ipynb` file. You may choose to ignore the created `.ipynb` file completely, as its functionality will be mirrored in Obsidian.
+
+## Contributing
+
+This project was originally built to solve a personal problem, and it's still in an early stage. Feedback, bug reports, and pull requests are all welcome and appreciated!
 
 > [!NOTE]
 > JupyMD currently supports Python execution only.
