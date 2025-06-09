@@ -30,8 +30,9 @@ With JupyMD you can:
 - **Notebook Conversion** – Convert existing notes in Obsidian to `.ipynb` files via Jupytext
 - **Bidirectional Updates** – Changes in Obsidian or Jupyter automatically sync between `.md` and `.ipynb` files
 - **Execute Code** – Run code blocks in Obsidian with output captured below each block, regardless of viewing mode
+- **Persistent Execution Environment** – Variables and imports defined in one code block are remembered by the following code blocks
 - **True Jupyter Sync** – Executed code blocks automatically update output metadata in linked `.ipynb` file
-- **Persistent Outputs** – Executed code outputs stay visible after restart and sync to `.ipynb` file
+- **Persistent Output Rendering** – Executed code outputs stay visible after restart and sync to `.ipynb` file
 - **Rich Output** – Support for `matplotlib` plots and `pandas` dataframe outputs
 
 ## Prerequisites
