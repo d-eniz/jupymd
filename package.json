@@ -19,16 +19,33 @@
 	"author": "Deniz Terzioglu",
 	"license": "MIT",
 	"devDependencies": {
+		"@types/lodash.debounce": "^4.0.9",
 		"@types/node": "^18.0.0",
+		"@types/react": "^19.1.6",
+		"@types/react-dom": "^19.1.5",
+		"@types/react-syntax-highlighter": "^15.5.13",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
 		"builtin-modules": "3.3.0",
-		"esbuild": "0.17.3",
+		"esbuild": "^0.25.2",
+		"esbuild-plugin-svgr": "^3.1.1",
 		"obsidian": "latest",
 		"tslib": "2.4.0",
 		"typescript": "4.9.5"
 	},
 	"dependencies": {
+		"@codemirror/highlight": "^0.19.8",
+		"@codemirror/lang-python": "^6.2.1",
+		"@codemirror/theme-one-dark": "^6.1.2",
+		"@types/prismjs": "^1.26.5",
+		"@uiw/react-codemirror": "^4.23.12",
+		"highlight.js": "^11.11.1",
+		"lodash.debounce": "^4.0.8",
+		"nanoid": "^5.1.5",
+		"prismjs": "^1.30.0",
+		"react": "^19.1.0",
+		"react-dom": "^19.1.0",
+		"react-syntax-highlighter": "^15.6.1",
 		"yaml": "^2.7.0"
 	}
 }
