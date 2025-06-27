@@ -8,6 +8,7 @@ import * as React from "react";
 import {createRoot} from "react-dom/client";
 import {PythonCodeBlock} from "./components/CodeBlock";
 import {getAbsolutePath} from "./utils/helpers";
+import {getDefaultPythonPath} from "./utils/pythonPathUtils";
 
 export default class JupyMDPlugin extends Plugin {
 	settings: JupyMDPluginSettings;
@@ -18,9 +19,14 @@ export default class JupyMDPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
+		if(!this.settings.pythonInterpreter) {
+			this.settings.pythonInterpreter = getDefaultPythonPath();
+			await this.saveSettings();
+		}
+
 		this.executor = new CodeExecutor(this, this.app);
 
-		this.fileSync = new FileSync(this.app);
+		this.fileSync = new FileSync(this.app, this.settings.pythonInterpreter);
 
 		registerCommands(this);
 

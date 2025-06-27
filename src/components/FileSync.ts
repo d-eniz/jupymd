@@ -1,9 +1,13 @@
 import {App, Notice, TFile, MarkdownView} from "obsidian";
 import {exec} from "child_process";
 import {getAbsolutePath, isNotebookPaired} from "../utils/helpers";
+import {getPackageExecutablePath} from "../utils/pythonPathUtils";
 
 export class FileSync {
-	constructor(private app: App) {
+	private readonly pythonPath: string;
+
+	constructor(private app: App, pythonPath: string) {
+		this.pythonPath = pythonPath;
 	}
 
 	async createNotebook() {
@@ -20,14 +24,15 @@ export class FileSync {
 			new Notice("Notebook is already paired with this note.");
 			return;
 		}
+		const jupytextCmd = getPackageExecutablePath("jupytext", this.pythonPath);
 
-		exec(`jupytext --to notebook "${mdPath}"`, (error) => {
+		exec(`${jupytextCmd} --to notebook "${mdPath}"`, (error) => {
 			if (error) {
 				new Notice(`Failed to create notebook: ${error.message}`);
 				return;
 			}
 
-			exec(`jupytext --set-formats ipynb,md "${ipynbPath}"`, (error) => {
+			exec(`${jupytextCmd} --set-formats ipynb,md "${ipynbPath}"`, (error) => {
 				if (error) {
 					new Notice(`Failed to pair notebook: ${error.message}`);
 					return;
@@ -81,7 +86,9 @@ export class FileSync {
 		const filePath = getAbsolutePath(file);
 
 		const ipynbPath = filePath.replace(/\.md$/, ".ipynb");
-		exec(`jupytext --sync "${ipynbPath}"`, (error) => {
+
+		const jupytextCmd = getPackageExecutablePath("jupytext", this.pythonPath);
+		exec(`${jupytextCmd} --sync "${ipynbPath}"`, (error) => {
 			if (error) {
 				console.error(
 					`Failed to sync Markdown file: ${error.message}`

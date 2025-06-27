@@ -1,9 +1,11 @@
 export type JupyMDPluginSettings = {
+	pythonInterpreter: string;
 	notebookEditorCommand: string;
 	enableCodeBlocks: boolean;
 }
 
 export const DEFAULT_SETTINGS: JupyMDPluginSettings = {
+	pythonInterpreter: "",
 	notebookEditorCommand: "jupyter-lab",
 	enableCodeBlocks: true,
 };
