@@ -113,6 +113,7 @@ export class CodeExecutor {
 
         return new Promise((resolve, reject) => {
             const initCode = `
+import ast
 import sys
 import io
 import base64
@@ -133,7 +134,23 @@ def execute_code(code_str):
     
     try:
         try:
-            compiled_code = compile(code_str, '<string>', 'exec')
+            parsed = ast.parse(code_str.strip())
+			# Check if this is a single expression
+            is_single_expression = (
+            len(parsed.body) == 1 and  # Only one thing in the code
+            isinstance(parsed.body[0], ast.Expr)  # And that thing is an expression
+            )
+
+            if is_single_expression:
+                # For single expressions, we want to capture and display the result
+                compiled_code = compile(code_str, '<string>', 'eval')  # Use 'eval' mode
+                
+                with redirect_stdout(_stdout), redirect_stderr(_stderr):
+                    result = eval(compiled_code)
+                    if result is not None:
+                        print(result)
+            else:
+                compiled_code = compile(code_str, '<string>', 'exec')
         except SyntaxError as e:
             _stderr.write(f"SyntaxError: {e.msg}\\n")
             if e.text:
@@ -143,21 +160,22 @@ def execute_code(code_str):
             _stderr.write(f"Compilation error: {str(e)}\\n")
             raise e
 
-        try:
-            with redirect_stdout(_stdout), redirect_stderr(_stderr):
-                exec(compiled_code, globals(), globals())
-                
-            _fig_after = plt.get_fignums()
-            if len(_fig_after) > len(_fig_before):
-                fig = plt.gcf()
-                fig.tight_layout(pad=0)
-                plt.savefig(_img_buf, format="png", bbox_inches='tight', pad_inches=0, dpi=100)
-                _img_buf.seek(0)
-                _img_data = base64.b64encode(_img_buf.read()).decode("utf-8")
-                plt.close('all')
-                
-        except Exception as e:
-            _stderr.write("".join(traceback.format_exception(type(e), e, e.__traceback__)))
+        if not is_single_expression:
+            try:
+                with redirect_stdout(_stdout), redirect_stderr(_stderr):
+                    exec(compiled_code, globals(), globals())
+                    
+                _fig_after = plt.get_fignums()
+                if len(_fig_after) > len(_fig_before):
+                    fig = plt.gcf()
+                    fig.tight_layout(pad=0)
+                    plt.savefig(_img_buf, format="png", bbox_inches='tight', pad_inches=0, dpi=100)
+                    _img_buf.seek(0)
+                    _img_data = base64.b64encode(_img_buf.read()).decode("utf-8")
+                    plt.close('all')
+                    
+            except Exception as e:
+                _stderr.write("".join(traceback.format_exception(type(e), e, e.__traceback__)))
             
     except Exception as e:
         _stderr.write("".join(traceback.format_exception(type(e), e, e.__traceback__)))
@@ -207,7 +225,7 @@ while True:
         sys.stdout.flush()
 `;
 
-            this.pythonProcess = spawn("python", ["-c", initCode]);
+            this.pythonProcess = spawn(this.plugin.settings.pythonInterpreter, ["-c", initCode]);
 
             let initOutput = "";
 
@@ -298,6 +316,32 @@ while True:
             }
         });
     }
+
+	async installLibs(libs: string[] = []): Promise<{
+		stdout: string;
+		stderr: string;
+		imageData?: string;
+	}> {
+		if (libs.length === 0) {
+			return { stdout: "No libraries to install", stderr: "" };
+		}
+
+		const installCode = `
+import subprocess
+import sys
+
+libs = ${JSON.stringify(libs)}
+for lib in libs:
+    print(f"Installing {lib}...")
+    result = subprocess.run([sys.executable, "-m", "pip", "install", "--user", lib], 
+                          capture_output=True, text=True)
+    print(result.stdout)
+    if result.stderr:
+        print(result.stderr, file=sys.stderr)
+`;
+
+		return this.sendCodeToPython(installCode);
+	}
 
     async restartKernel(): Promise<void> {
         if (this.pythonProcess) {

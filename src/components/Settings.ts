@@ -1,7 +1,7 @@
 import {App, PluginSettingTab, Setting, Notice} from "obsidian";
 import {CodeExecutor} from "./CodeExecutor";
 import JupyMDPlugin from "../main";
-import {exec} from "child_process";
+import {validatePythonPath} from "../utils/pythonPathUtils";
 
 export class JupyMDSettingTab extends PluginSettingTab {
     plugin: JupyMDPlugin;
@@ -49,22 +49,41 @@ export class JupyMDSettingTab extends PluginSettingTab {
                     .onClick(async () => {
                         new Notice("Installing Jupytext...");
 
-                        const command =
-                            process.platform === "win32"
-                                ? "pip install jupytext"
-                                : "python3 -m pip install --user jupytext";
+                        try {
+                            const {stdout, stderr} = await this.executor.installLibs(["jupytext"]);
 
-                        exec(command, (error, stdout, stderr) => {
-                            if (error) {
+                            if (stderr) {
                                 new Notice("Failed to install Jupytext.");
                                 console.error(stderr);
                             } else {
                                 new Notice("Jupytext installed successfully.");
                                 console.log(stdout);
                             }
-                        });
+                        } catch (error) {
+                            new Notice("Failed to install Jupytext.");
+                            console.error(error);
+                        }
                     })
             );
+        new Setting(containerEl)
+            .setName("Python Interpreter")
+            .setDesc("Select the python interpreter. Requires restart to take effect.")
+            .addText((text) => {
+                text.setValue(this.plugin.settings.pythonInterpreter)
+                text.setPlaceholder("python3")
+                text.onChange(async (value) => {
+                    const cleaned = value.trim();
+                    const valid = await validatePythonPath(cleaned);
+                    if (cleaned && !valid) {
+                        new Notice("Invalid Python path");
+                        return; // Don't save invalid paths
+                    }
+
+                    this.plugin.settings.pythonInterpreter = cleaned;
+                    await this.plugin.saveSettings();
+                    await this.plugin.onload();
+                })
+            })
 
     }
 }
