@@ -225,7 +225,11 @@ while True:
         sys.stdout.flush()
 `;
 
-            this.pythonProcess = spawn(this.plugin.settings.pythonInterpreter, ["-c", initCode]);
+            this.pythonProcess = spawn(
+                this.plugin.settings.pythonInterpreter,
+                ["-c", initCode],
+                { env: { ...process.env } }
+            );
 
             let initOutput = "";
 
