@@ -317,32 +317,6 @@ while True:
         });
     }
 
-	async installLibs(libs: string[] = []): Promise<{
-		stdout: string;
-		stderr: string;
-		imageData?: string;
-	}> {
-		if (libs.length === 0) {
-			return { stdout: "No libraries to install", stderr: "" };
-		}
-
-		const installCode = `
-import subprocess
-import sys
-
-libs = ${JSON.stringify(libs)}
-for lib in libs:
-    print(f"Installing {lib}...")
-    result = subprocess.run([sys.executable, "-m", "pip", "install", "--user", lib], 
-                          capture_output=True, text=True)
-    print(result.stdout)
-    if result.stderr:
-        print(result.stderr, file=sys.stderr)
-`;
-
-		return this.sendCodeToPython(installCode);
-	}
-
     async restartKernel(): Promise<void> {
         if (this.pythonProcess) {
             this.pythonProcess.stdin?.write("EXIT\n");
