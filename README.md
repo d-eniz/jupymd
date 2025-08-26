@@ -25,9 +25,12 @@ With JupyMD you can:
 ### Visualising fractals with `matplotlib`
 ![mandelbrot-set](assets/mandelbrot-set.png)
 
+
 ## Features
 
-- **Notebook Conversion** – Convert existing notes in Obsidian to `.ipynb` files via Jupytext
+- **Notebook Conversion**
+  - Convert existing notes in Obsidian to `.ipynb` files via Jupytext
+  - Convert existing Jupyter notebooks (`.ipynb`) to Markdown notes (`.md`) via Jupytext
 - **Bidirectional Updates** – Changes in Obsidian or Jupyter automatically sync between `.md` and `.ipynb` files
 - **Execute Code** – Run code blocks in Obsidian with output captured below each block, regardless of viewing mode
 - **Persistent Execution Environment** – Variables and imports defined in one code block are remembered by the following code blocks
@@ -43,14 +46,22 @@ With JupyMD you can:
 - [Jupytext](https://github.com/mwouts/jupytext)
   `pip install jupytext`
 
+
 ## Getting started
 
 Download the plugin through the [Obsidian community plugin browser](obsidian://show-plugin?id=jupymd) and enable it. If not yet installed, install Jupyter notebook and Jupytext through pip.
 
-Simply execute the following command on a note you want Jupyter notebook capability on:
+### To convert a note to a Jupyter notebook
+Execute the following command on a note you want Jupyter notebook capability on:
 > `JupyMD: Create Jupyter notebook from note`
 
 This will create an `.ipynb` file with the same file name as the current note on the file directory, and will transform your Python code blocks into interactive code blocks. Your note will now behave like a Jupyter notebook, and sync its contents automatically to the `.ipynb` file. You may choose to ignore the created `.ipynb` file completely, as its functionality will be mirrored in Obsidian.
+
+### To convert a Jupyter notebook to a note
+Open a `.ipynb` file in Obsidian and execute:
+> `JupyMD: Create note from Jupyter notebook`
+
+This will create a Markdown note (`.md`) with the same file name as the notebook, and set up bidirectional sync between the notebook and the note.
 
 ## Contributing
 

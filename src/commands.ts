@@ -1,13 +1,19 @@
 import JupyMDPlugin from "./main";
 
 export function registerCommands(plugin: JupyMDPlugin) {
-	const {fileSync} = plugin;
-	const {executor} = plugin;
+	const { fileSync } = plugin;
+	const { executor } = plugin;
 
 	plugin.addCommand({
 		id: "create-jupyter-notebook",
 		name: "Create Jupyter notebook from note",
 		callback: () => fileSync.createNotebook(),
+	});
+
+	plugin.addCommand({
+		id: "create-note-from-jupyter-notebook",
+		name: "Create note from Jupyter notebook",
+		callback: () => fileSync.convertNotebookToNote(),
 	});
 
 	plugin.addCommand({
