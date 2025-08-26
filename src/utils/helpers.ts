@@ -1,6 +1,8 @@
 import {promises as fs} from "fs";
+import {exec} from "child_process";
+import {promisify} from "util";
 import * as path from "path";
-import {FileSystemAdapter, TFile} from "obsidian";
+import {FileSystemAdapter, TFile, Notice} from "obsidian";
 
 export function getAbsolutePath(file: TFile): string {
 	const adapter = this.app.vault.adapter;
@@ -21,5 +23,26 @@ export async function isNotebookPaired(file: any): Promise<boolean> {
 		return true;
 	} catch (error) {
 		return false;
+	}
+}
+
+export async function installLibs(interpreter: string, libraries: string): Promise<void> {
+
+	const execAsync = promisify(exec)
+	const command = `${interpreter} -m pip install ${libraries}`
+
+	try {
+		const {stdout, stderr} = await execAsync(command)
+
+		new Notice(`Required libraries installed for ${interpreter}`)
+
+		if (stderr) {
+			new Notice("Warnings issued for installation, check console for details.");
+			console.error(stderr)
+		} 
+	} 
+	catch(err) {
+		new Notice("Failed to install packages, check console for details.")
+		console.error(err)
 	}
 }
