@@ -2,6 +2,7 @@ import {App, PluginSettingTab, Setting, Notice} from "obsidian";
 import {CodeExecutor} from "./CodeExecutor";
 import JupyMDPlugin from "../main";
 import {validatePythonPath} from "../utils/pythonPathUtils";
+import { installLibs } from "../utils/helpers";
 
 export class JupyMDSettingTab extends PluginSettingTab {
     plugin: JupyMDPlugin;
@@ -40,33 +41,21 @@ export class JupyMDSettingTab extends PluginSettingTab {
             })
 
         new Setting(containerEl)
-            .setName("Install Jupytext")
-            .setDesc("Attempt to install Jupytext using pip")
+            .setName("Install required libraries")
+            .setDesc("Attempt to install Jupytext and matplotlib for specified interpreter using pip")
             .addButton((btn) =>
                 btn
                     .setButtonText("Install")
                     .setCta()
                     .onClick(async () => {
-                        new Notice("Installing Jupytext...");
+                        new Notice("Installing libraries...");
 
-                        try {
-                            const {stdout, stderr} = await this.executor.installLibs(["jupytext"]);
-
-                            if (stderr) {
-                                new Notice("Failed to install Jupytext.");
-                                console.error(stderr);
-                            } else {
-                                new Notice("Jupytext installed successfully.");
-                                console.log(stdout);
-                            }
-                        } catch (error) {
-                            new Notice("Failed to install Jupytext.");
-                            console.error(error);
-                        }
+                        await installLibs(this.plugin.settings.pythonInterpreter,"jupytext matplotlib")
                     })
             );
+
         new Setting(containerEl)
-            .setName("Python Interpreter")
+            .setName("Python interpreter")
             .setDesc("Select the Python interpreter. Requires restart to take effect.")
             .addText((text) => {
                 text.setValue(this.plugin.settings.pythonInterpreter)
