@@ -67,7 +67,7 @@ export class JupyMDSettingTab extends PluginSettingTab {
             );
         new Setting(containerEl)
             .setName("Python Interpreter")
-            .setDesc("Select the python interpreter. Requires restart to take effect.")
+            .setDesc("Select the Python interpreter. Requires restart to take effect.")
             .addText((text) => {
                 text.setValue(this.plugin.settings.pythonInterpreter)
                 text.setPlaceholder("python3")
@@ -75,13 +75,15 @@ export class JupyMDSettingTab extends PluginSettingTab {
                     const cleaned = value.trim();
                     const valid = await validatePythonPath(cleaned);
                     if (cleaned && !valid) {
-                        new Notice("Invalid Python path");
-                        return; // Don't save invalid paths
+                        new Notice("Invalid Python path")
+                        return;
+                    }
+                    if (valid) {
+                        new Notice("Valid Python path, saving interpreter location...")
                     }
 
                     this.plugin.settings.pythonInterpreter = cleaned;
                     await this.plugin.saveSettings();
-                    await this.plugin.onload();
                 })
             })
 
