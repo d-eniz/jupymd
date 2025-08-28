@@ -1,14 +1,14 @@
-import {Plugin, TFile} from "obsidian";
-import {JupyMDSettingTab} from "./components/Settings";
-import {CodeExecutor} from "./components/CodeExecutor";
-import {FileSync} from "./components/FileSync";
-import {DEFAULT_SETTINGS, JupyMDPluginSettings} from "./components/types";
-import {registerCommands} from "./commands";
+import { Plugin, TFile } from "obsidian";
+import { JupyMDSettingTab } from "./components/Settings";
+import { CodeExecutor } from "./components/CodeExecutor";
+import { FileSync } from "./components/FileSync";
+import { DEFAULT_SETTINGS, JupyMDPluginSettings } from "./components/types";
+import { registerCommands } from "./commands";
 import * as React from "react";
-import {createRoot} from "react-dom/client";
-import {PythonCodeBlock} from "./components/CodeBlock";
-import {getAbsolutePath} from "./utils/helpers";
-import {getDefaultPythonPath} from "./utils/pythonPathUtils";
+import { createRoot } from "react-dom/client";
+import { PythonCodeBlock } from "./components/CodeBlock";
+import { getAbsolutePath } from "./utils/helpers";
+import { getDefaultPythonPath } from "./utils/pythonPathUtils";
 
 export default class JupyMDPlugin extends Plugin {
 	settings: JupyMDPluginSettings;
@@ -19,7 +19,7 @@ export default class JupyMDPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		if(!this.settings.pythonInterpreter) {
+		if (!this.settings.pythonInterpreter) {
 			this.settings.pythonInterpreter = getDefaultPythonPath();
 			await this.saveSettings();
 		}
@@ -41,6 +41,30 @@ export default class JupyMDPlugin extends Plugin {
 		if (this.settings.enableCodeBlocks) {
 			this.registerMarkdownCodeBlockProcessor("python", (source, el, ctx) => {
 				el.empty();
+
+
+
+
+				// Create a container that preserves markdown structure for PDF export
+				const markdownContainer = document.createElement("div");
+				markdownContainer.className = "jupymd-code-block-container";
+				markdownContainer.style.display = "none"; // Hidden from view but accessible to PDF export
+
+				// Preserve original markdown structure
+				const markdownCode = document.createElement("pre");
+				markdownCode.className = "language-python";
+				const markdownCodeEl = document.createElement("code");
+				markdownCodeEl.className = "language-python";
+				markdownCodeEl.textContent = source;
+				markdownCode.appendChild(markdownCodeEl);
+				markdownContainer.appendChild(markdownCode);
+
+				// Add to DOM but keep hidden
+				el.appendChild(markdownContainer);
+
+
+
+
 				const reactRoot = document.createElement("div");
 				el.appendChild(reactRoot);
 
@@ -85,7 +109,7 @@ export default class JupyMDPlugin extends Plugin {
 						}
 					});
 				} else {
-					createRoot(reactRoot).render(<PythonCodeBlock code={source}/>);
+					createRoot(reactRoot).render(<PythonCodeBlock code={source} />);
 				}
 			});
 		}

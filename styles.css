@@ -2,6 +2,37 @@
 	display: none !important;
 }
 
+/* PDF Export Compatibility Styles */
+.jupymd-code-block-container {
+	display: none !important;
+}
+
+@media print {
+	.jupymd-code-block-container {
+		display: block !important;
+	}
+
+	.jupymd-code-block-container pre {
+		margin: 1em 0;
+		padding: 1em;
+		background-color: #f6f8fa !important;
+		border: 1px solid #d1d9e0 !important;
+		border-radius: 6px;
+		font-family: 'SFMono-Regular', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Consolas', 'Courier New', monospace !important;
+		font-size: 12px !important;
+		line-height: 1.45 !important;
+		overflow: auto;
+		white-space: pre;
+	}
+
+	.jupymd-code-block-container code {
+		font-family: inherit !important;
+		background-color: transparent !important;
+		border: none !important;
+		padding: 0 !important;
+	}
+}
+
 .code-container {
 	border-radius: 6px;
 	overflow: hidden;
@@ -88,4 +119,37 @@
 .code-container .cm-content {
 	border: none;
 	box-shadow: none;
+}
+
+/* Additional PDF export styles for React-rendered code blocks */
+@media print {
+	.code-container {
+		border: 1px solid #d1d9e0 !important;
+		background-color: #f6f8fa !important;
+	}
+
+	.code-container .cm-editor {
+		background-color: #f6f8fa !important;
+		font-family: 'SFMono-Regular', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Consolas', 'Courier New', monospace !important;
+		font-size: 12px !important;
+		line-height: 1.45 !important;
+	}
+
+	.code-container .cm-scroller {
+		background-color: #f6f8fa !important;
+		padding: 1em !important;
+	}
+
+	/* Hide interactive elements in print */
+	.code-top-bar,
+	.icon-button,
+	.code-buttons {
+		display: none !important;
+	}
+
+	.code-output {
+		border-top: 1px solid #d1d9e0 !important;
+		margin-top: 1em !important;
+		padding-top: 1em !important;
+	}
 }
