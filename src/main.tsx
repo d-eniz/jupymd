@@ -20,6 +20,15 @@ export default class JupyMDPlugin extends Plugin {
 	private readonly SYNC_DEADTIME_MS = 1500;
 	private readonly DEBOUNCE_DELAY_MS = 500;
 
+	public isSyncBlocked(): boolean {
+		const now = Date.now();
+
+		const inDeadtime = now - this.lastSyncTime < this.SYNC_DEADTIME_MS;
+		const inDebounce = this.syncDebounceTimeout !== null;
+
+		return inDeadtime || inDebounce;
+  	}
+
 	async onload() {
 		await this.loadSettings();
 
@@ -36,12 +45,9 @@ export default class JupyMDPlugin extends Plugin {
 
 		this.addSettingTab(new JupyMDSettingTab(this.app, this));
 
-		this.registerEvent(
+		this.registerEvent( // TODO: add option manually sync and disable auto sync
 			this.app.vault.on("modify", async (file: TFile) => {
-				console.log("modify");
-				if (this.settings.enableContinuousSync) {
-					await this.handleSync(file);
-				}
+				await this.handleSync(file);
 			})
 		);
 
@@ -104,32 +110,32 @@ export default class JupyMDPlugin extends Plugin {
 	}
 
 	private async handleSync(file: TFile): Promise<void> {
-		if (this.syncDebounceTimeout) {
-			clearTimeout(this.syncDebounceTimeout);
-		}
-		this.syncDebounceTimeout = setTimeout(async () => {
-			await this.deadtimeSync(file);
-		}, this.DEBOUNCE_DELAY_MS);
-	}
-
-	private async deadtimeSync(file: TFile): Promise<void> {
-		const currentTime = Date.now();
-
-		if (currentTime - this.lastSyncTime < this.SYNC_DEADTIME_MS) {
-			console.log("sync request ignored - deadtime");
+		if (this.isSyncBlocked()){
 			return;
 		}
 
+		if (this.syncDebounceTimeout) {
+			clearTimeout(this.syncDebounceTimeout);
+		}
+
+		this.syncDebounceTimeout = setTimeout(async () => {
+			this.syncDebounceTimeout = null;
+
+			if (!this.isSyncBlocked()){
+				await this.performSync(file);
+			}
+		}, this.DEBOUNCE_DELAY_MS);
+	}
+
+	private async performSync(file: TFile): Promise<void> {
 		try {
-			console.log("start sync");
-			this.lastSyncTime = currentTime;
+			this.lastSyncTime = Date.now();
 			await this.fileSync.syncFiles(file);
-			console.log("sync complete");
 		} catch (error) {
-			console.error(error);
+			console.error("Sync failed:", error);
 			this.lastSyncTime = 0;
 		}
-	}
+  	}
 
 	async onunload() {
 		this.executor.cleanup();
