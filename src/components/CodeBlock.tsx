@@ -8,13 +8,12 @@ import {LoadIcon} from "../svg/LoadIcon";
 import {CodeBlock, PythonBlockProps} from "./types";
 import {HighlightedCodeBlock} from "./HighlightedCodeBlock";
 
-
 export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 																code = "# No code provided",
 																path,
 																index,
 																executor,
-																plugin
+																plugin,
 															}) => {
 	const [output, setOutput] = useState<string | JSX.Element>("");
 	const [hasOutput, setHasOutput] = useState<boolean>(false);
@@ -27,6 +26,9 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 	const prevBlockCountRef = useRef<number>(0);
 	const prevCodeRef = useRef<string>(code);
 	const codeBlockRef = useRef<HTMLDivElement>(null);
+
+	const SYNC_CHECK_INTERVAL = 100; // ms
+	const MAX_SYNC_WAIT_TIME = 5000;
 
 	const handleEditClick = async () => {
 		if (!activeFile || !plugin.app.workspace.activeEditor) return;
@@ -171,12 +173,45 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 		}
 	};
 
+	const waitForSyncUnblocked = async (): Promise<boolean> => {
+		const startTime = Date.now();
+		
+		return new Promise((resolve) => {
+			const checkSync = () => {
+				const elapsedTime = Date.now() - startTime;
+				
+				if (elapsedTime >= MAX_SYNC_WAIT_TIME) {
+					console.warn("Max sync wait time exceeded, proceeding with execution");
+					resolve(false);
+					return;
+				}
+				
+				if (!plugin.isSyncBlocked()) {
+					resolve(true);
+					return;
+				}
+				
+				setTimeout(checkSync, SYNC_CHECK_INTERVAL);
+			};
+			
+			checkSync();
+		});
+	};
+
 	const handleRun = async () => {
+
 		if (!executor || !path || currentIndex === undefined) return;
 
 		setIsLoading(true);
 
 		try {
+
+			const syncUnblocked = await waitForSyncUnblocked();
+
+			if (!syncUnblocked) {
+				console.warn("Code execution proceeding despite sync being blocked (timeout reached)");
+			}
+
 			const codeBlock: CodeBlock = {
 				code: code,
 				cellIndex: currentIndex
@@ -188,6 +223,7 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 			}
 
 			await executor.executeCodeBlock(codeBlock);
+
 			await reindexBlock();
 
 			setTimeout(async () => {
