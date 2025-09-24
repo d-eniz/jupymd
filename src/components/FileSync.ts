@@ -157,6 +157,7 @@ export class FileSync {
 				new Notice(
 					`Failed to open notebook in editor: ${error.message}`
 				);
+				console.error(error)
 				return;
 			}
 			new Notice(`Opened notebook in editor: ${ipynbPath}`);
