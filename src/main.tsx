@@ -15,20 +15,6 @@ export default class JupyMDPlugin extends Plugin {
 	fileSync: FileSync;
 	currentNotePath: string | null = null;
 
-	private lastSyncTime: number = 0;
-	private syncDebounceTimeout: NodeJS.Timeout | null = null;
-	private readonly SYNC_DEADTIME_MS = 1500;
-	private readonly DEBOUNCE_DELAY_MS = 500;
-
-	public isSyncBlocked(): boolean {
-		const now = Date.now();
-
-		const inDeadtime = now - this.lastSyncTime < this.SYNC_DEADTIME_MS;
-		const inDebounce = this.syncDebounceTimeout !== null;
-
-		return inDeadtime || inDebounce;
-  	}
-
 	async onload() {
 		await this.loadSettings();
 
@@ -47,7 +33,9 @@ export default class JupyMDPlugin extends Plugin {
 
 		this.registerEvent( // TODO: add option manually sync and disable auto sync
 			this.app.vault.on("modify", async (file: TFile) => {
-				await this.handleSync(file);
+				if (this.settings.autoSync) {
+					await this.fileSync.handleSync(file);
+				}
 			})
 		);
 
@@ -108,34 +96,6 @@ export default class JupyMDPlugin extends Plugin {
 			);
 		}
 	}
-
-	private async handleSync(file: TFile): Promise<void> {
-		if (this.isSyncBlocked()){
-			return;
-		}
-
-		if (this.syncDebounceTimeout) {
-			clearTimeout(this.syncDebounceTimeout);
-		}
-
-		this.syncDebounceTimeout = setTimeout(async () => {
-			this.syncDebounceTimeout = null;
-
-			if (!this.isSyncBlocked()){
-				await this.performSync(file);
-			}
-		}, this.DEBOUNCE_DELAY_MS);
-	}
-
-	private async performSync(file: TFile): Promise<void> {
-		try {
-			this.lastSyncTime = Date.now();
-			await this.fileSync.syncFiles(file);
-		} catch (error) {
-			console.error("Sync failed:", error);
-			this.lastSyncTime = 0;
-		}
-  	}
 
 	async onunload() {
 		this.executor.cleanup();

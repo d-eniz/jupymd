@@ -6,19 +6,64 @@ import { getPackageExecutablePath } from "../utils/pythonPathUtils";
 export class FileSync {
 	private readonly pythonPath: string;
 
+	private lastSyncTime: number = 0;
+	private syncDebounceTimeout: NodeJS.Timeout | null = null;
+	private readonly SYNC_DEADTIME_MS = 1500;
+	private readonly DEBOUNCE_DELAY_MS = 500;
+
 	constructor(private app: App, pythonPath: string) {
 		this.pythonPath = pythonPath;
 	}
 
+	public isSyncBlocked(): boolean {
+		const now = Date.now();
+		const inDeadtime = now - this.lastSyncTime < this.SYNC_DEADTIME_MS;
+		const inDebounce = this.syncDebounceTimeout !== null;
+		return inDeadtime || inDebounce;
+	}
+
+	public async handleSync(file?: TFile, verbose?: boolean): Promise<void> {
+		const targetFile = file ?? this.app.workspace.getActiveFile();
+		if (!targetFile) return;
+
+		if (this.isSyncBlocked()) {
+			return;
+		}
+
+		if (this.syncDebounceTimeout) {
+			clearTimeout(this.syncDebounceTimeout);
+		}
+
+		this.syncDebounceTimeout = setTimeout(async () => {
+			this.syncDebounceTimeout = null;
+
+			if (!this.isSyncBlocked()) {
+				await this.performSync(targetFile);
+			}
+		}, this.DEBOUNCE_DELAY_MS);
+
+		if (verbose) {
+			new Notice("Syncing...")
+		}
+	}
+
+	private async performSync(file: TFile): Promise<void> {
+		try {
+			this.lastSyncTime = Date.now();
+			await this.syncFiles(file);
+		} catch (error) {
+			console.error("Sync failed:", error);
+			this.lastSyncTime = 0;
+		}
+	}
+
 	async convertNotebookToNote() {
-		// List all .ipynb files in the vault
 		const files = this.app.vault.getFiles().filter(f => f.path.endsWith('.ipynb'));
 		if (files.length === 0) {
 			new Notice("No Jupyter notebook (.ipynb) files found in your vault.");
 			return;
 		}
 
-		// Prompt user to pick a file
 		const fileNames = files.map(f => f.path);
 		const selected = await new Promise<string | null>((resolve) => {
 			const modal = document.createElement('div');
