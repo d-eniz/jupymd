@@ -1,10 +1,12 @@
 export type JupyMDPluginSettings = {
+	autoSync: boolean;
 	pythonInterpreter: string;
 	notebookEditorCommand: string;
 	enableCodeBlocks: boolean;
 }
 
 export const DEFAULT_SETTINGS: JupyMDPluginSettings = {
+	autoSync: true,
 	pythonInterpreter: "",
 	notebookEditorCommand: "jupyter-lab",
 	enableCodeBlocks: true,
