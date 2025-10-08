@@ -27,4 +27,10 @@ export function registerCommands(plugin: JupyMDPlugin) {
 		name: "Restart Python kernel",
 		callback: () => executor.restartKernel(),
 	});
+
+	plugin.addCommand({
+		id: "force-sync",
+		name: "Sync files",
+		callback: () => fileSync.handleSync(undefined, true),
+	});
 }
