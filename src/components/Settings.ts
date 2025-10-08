@@ -18,27 +18,7 @@ export class JupyMDSettingTab extends PluginSettingTab {
         const {containerEl} = this;
         containerEl.empty();
 
-        new Setting(containerEl)
-            .setName("Jupyter notebook editor launch command")
-            .setDesc("Specify the command to launch Jupyter notebooks in your preferred editor (e.g., 'code' for VS Code, 'jupyter-lab' for Jupyter Lab, 'pycharm64.exe' for PyCharm, etc.)")
-            .addText((text) => {
-                text.setValue(this.plugin.settings.notebookEditorCommand)
-                    .onChange(async (value) => {
-                        this.plugin.settings.notebookEditorCommand = value;
-                        await this.plugin.saveSettings();
-                    });
-            })
-
-        new Setting(containerEl)
-            .setName("Enable custom Python code block")
-            .setDesc("If disabled, the default Obsidian code block will be used. Requires restart to take effect.")
-            .addToggle((toggle) => {
-                toggle.setValue(this.plugin.settings.enableCodeBlocks)
-                toggle.onChange(async (value) => {
-                    this.plugin.settings.enableCodeBlocks = value;
-                    await this.plugin.saveSettings();
-                })
-            })
+        containerEl.createEl("h4", { text: "Setup" });
 
         new Setting(containerEl)
             .setName("Install required libraries")
@@ -76,5 +56,40 @@ export class JupyMDSettingTab extends PluginSettingTab {
                 })
             })
 
+        containerEl.createEl('hr');
+        containerEl.createEl("h4", { text: "General" });
+
+        new Setting(containerEl)
+            .setName("Jupyter notebook editor launch command")
+            .setDesc("Specify the command to launch Jupyter notebooks in your preferred editor (e.g., 'code' for VS Code, 'jupyter-lab' for Jupyter Lab, 'pycharm64.exe' for PyCharm, etc.)")
+            .addText((text) => {
+                text.setValue(this.plugin.settings.notebookEditorCommand)
+                    .onChange(async (value) => {
+                        this.plugin.settings.notebookEditorCommand = value;
+                        await this.plugin.saveSettings();
+                    });
+            })
+
+        new Setting(containerEl)
+            .setName("Custom Python code blocks")
+            .setDesc("If disabled, the default Obsidian code block will be used. Requires restart to take effect.")
+            .addToggle((toggle) => {
+                toggle.setValue(this.plugin.settings.enableCodeBlocks)
+                toggle.onChange(async (value) => {
+                    this.plugin.settings.enableCodeBlocks = value;
+                    await this.plugin.saveSettings();
+                })
+            })
+
+        new Setting(containerEl)
+            .setName("Automatic sync")
+            .setDesc("If disabled, linked markdown and Jupyter notebook files will have to be synced manually through the \"JupyMD: Sync files\" command. Disable if experiencing sync issues.")
+            .addToggle((toggle) => {
+                toggle.setValue(this.plugin.settings.autoSync)
+                toggle.onChange(async (value) => {
+                    this.plugin.settings.autoSync = value;
+                    await this.plugin.saveSettings();
+                })
+            })
     }
 }
