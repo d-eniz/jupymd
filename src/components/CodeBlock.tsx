@@ -186,7 +186,7 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 					return;
 				}
 				
-				if (!plugin.isSyncBlocked()) {
+				if (!plugin?.fileSync?.isSyncBlocked?.()) {
 					resolve(true);
 					return;
 				}
@@ -228,6 +228,12 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 
 			setTimeout(async () => {
 				await renderOutputs();
+				await fs.utimes(path, new Date(), new Date()); 
+				/* when the output is pushed to the .ipynb file, the modification time 
+				of it becomes more recent than the markdown file's. this causes the sync
+				to be biased towards the .ipynb file which in reality is older than the
+				markdown file. to mitigate, the markdown file is force modified after the 
+				output is pushed to the .ipynb file. */
 				setIsLoading(false);
 			}, 100);
 		} catch (err) {
