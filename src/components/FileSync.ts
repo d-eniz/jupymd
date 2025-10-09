@@ -2,17 +2,20 @@ import { App, Notice, TFile, MarkdownView } from "obsidian";
 import { exec } from "child_process";
 import { getAbsolutePath, isNotebookPaired } from "../utils/helpers";
 import { getPackageExecutablePath } from "../utils/pythonPathUtils";
+import { JupyMDPluginSettings } from "./types"; 
 
 export class FileSync {
 	private readonly pythonPath: string;
+	private settings: JupyMDPluginSettings;
 
 	private lastSyncTime: number = 0;
 	private syncDebounceTimeout: NodeJS.Timeout | null = null;
 	private readonly SYNC_DEADTIME_MS = 1500;
 	private readonly DEBOUNCE_DELAY_MS = 500;
 
-	constructor(private app: App, pythonPath: string) {
+	constructor(private app: App, pythonPath: string, settings: JupyMDPluginSettings) {
 		this.pythonPath = pythonPath;
+		this.settings = settings;
 	}
 
 	public isSyncBlocked(): boolean {
@@ -221,7 +224,15 @@ export class FileSync {
 		const ipynbPath = filePath.replace(/\.md$/, ".ipynb");
 
 		const jupytextCmd = getPackageExecutablePath("jupytext", this.pythonPath);
-		exec(`${jupytextCmd} --sync "${ipynbPath}"`, (error) => {
+
+		let syncCmd: string;
+		if (this.settings.bidirectionalSync) {
+			syncCmd = `--sync "${ipynbPath}"`;
+		} else {
+			syncCmd = `--to ipynb "${filePath}"`;
+		}
+
+		exec(`${jupytextCmd} ${syncCmd}`, (error) => {
 			if (error) {
 				console.error(
 					`Failed to sync Markdown file: ${error.message}`
