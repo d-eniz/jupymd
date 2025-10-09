@@ -21,20 +21,6 @@ export class JupyMDSettingTab extends PluginSettingTab {
         containerEl.createEl("h4", { text: "Setup" });
 
         new Setting(containerEl)
-            .setName("Install required libraries")
-            .setDesc("Attempt to install Jupytext and matplotlib for specified interpreter using pip")
-            .addButton((btn) =>
-                btn
-                    .setButtonText("Install")
-                    .setCta()
-                    .onClick(async () => {
-                        new Notice("Installing libraries...");
-
-                        await installLibs(this.plugin.settings.pythonInterpreter,"jupytext matplotlib")
-                    })
-            );
-
-        new Setting(containerEl)
             .setName("Python interpreter")
             .setDesc("Select the Python interpreter. Requires restart to take effect.")
             .addText((text) => {
@@ -56,6 +42,20 @@ export class JupyMDSettingTab extends PluginSettingTab {
                 })
             })
 
+        new Setting(containerEl)
+            .setName("Install required libraries")
+            .setDesc("Attempt to install Jupytext and matplotlib for specified interpreter using pip.")
+            .addButton((btn) =>
+                btn
+                    .setButtonText("Install")
+                    .setCta()
+                    .onClick(async () => {
+                        new Notice("Installing libraries...");
+
+                        await installLibs(this.plugin.settings.pythonInterpreter,"jupytext matplotlib")
+                    })
+            );
+
         containerEl.createEl('hr');
         containerEl.createEl("h4", { text: "General" });
 
@@ -72,7 +72,7 @@ export class JupyMDSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName("Custom Python code blocks")
-            .setDesc("If disabled, the default Obsidian code block will be used. Requires restart to take effect.")
+            .setDesc("When disabled, the default Obsidian code block will be used. Requires restart to take effect.")
             .addToggle((toggle) => {
                 toggle.setValue(this.plugin.settings.enableCodeBlocks)
                 toggle.onChange(async (value) => {
@@ -83,11 +83,22 @@ export class JupyMDSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName("Automatic sync")
-            .setDesc("If disabled, linked markdown and Jupyter notebook files will have to be synced manually through the \"JupyMD: Sync files\" command. Disable if experiencing sync issues.")
+            .setDesc("When disabled, linked markdown and Jupyter notebook files will have to be synced manually through the \"JupyMD: Sync files\" command. Disable if experiencing sync issues.")
             .addToggle((toggle) => {
                 toggle.setValue(this.plugin.settings.autoSync)
                 toggle.onChange(async (value) => {
                     this.plugin.settings.autoSync = value;
+                    await this.plugin.saveSettings();
+                })
+            })
+
+        new Setting(containerEl)
+            .setName("Bidirectional sync")
+            .setDesc("When disabled, changes made in a Jupyter notebook file will always be overwritten by changes made in its paired markdown file. Enabling may cause sync issues.")
+            .addToggle((toggle) => {
+                toggle.setValue(this.plugin.settings.bidirectionalSync)
+                toggle.onChange(async (value) => {
+                    this.plugin.settings.bidirectionalSync = value;
                     await this.plugin.saveSettings();
                 })
             })

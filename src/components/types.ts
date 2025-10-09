@@ -1,5 +1,6 @@
 export type JupyMDPluginSettings = {
 	autoSync: boolean;
+	bidirectionalSync: boolean;
 	pythonInterpreter: string;
 	notebookEditorCommand: string;
 	enableCodeBlocks: boolean;
@@ -7,6 +8,7 @@ export type JupyMDPluginSettings = {
 
 export const DEFAULT_SETTINGS: JupyMDPluginSettings = {
 	autoSync: true,
+	bidirectionalSync: false,
 	pythonInterpreter: "",
 	notebookEditorCommand: "jupyter-lab",
 	enableCodeBlocks: true,
