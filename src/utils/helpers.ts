@@ -15,13 +15,21 @@ export function getAbsolutePath(file: TFile): string {
 }
 
 export async function isNotebookPaired(file: any): Promise<boolean> {
-	const mdPath = getAbsolutePath(file);
-	const ipynbPath = mdPath.replace(/\.md$/, ".ipynb");
+	const absPath = getAbsolutePath(file);
+	let targetPath: string;
+
+	if (absPath.endsWith(".md")) {
+		targetPath = absPath.replace(/\.md$/, ".ipynb");
+	} else if (absPath.endsWith(".ipynb")) {
+		targetPath = absPath.replace(/\.ipynb$/, ".md");
+	} else {
+		return false;
+	}
 
 	try {
-		await fs.access(ipynbPath, fs.constants.F_OK);
+		await fs.access(targetPath, fs.constants.F_OK);
 		return true;
-	} catch (error) {
+	} catch {
 		return false;
 	}
 }
