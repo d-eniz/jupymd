@@ -11,6 +11,7 @@ Remember that this is a community driven project, maintained in people’s free 
 - Use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/).
 - Keep commits to **one logical change at a time**. Try to avoid large commits.
 - Make sure your commits leave the project in a working state.
+- Don't bump versions or edit the manifest file.
 
 ### Pull requests
 
