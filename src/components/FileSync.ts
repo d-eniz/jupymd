@@ -214,8 +214,7 @@ export class FileSync {
 
 	async syncFiles(file: TFile) {
 
-		const activeFile = this.app.workspace.getActiveFile();
-		if (!await isNotebookPaired(activeFile)) {
+		if (!await isNotebookPaired(file)) {
 			return;
 		}
 
