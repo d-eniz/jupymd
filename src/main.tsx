@@ -32,7 +32,7 @@ export default class JupyMDPlugin extends Plugin {
 
 		this.registerEvent( // TODO: add option manually sync and disable auto sync
 			this.app.vault.on("modify", async (file: TFile) => {
-				if (this.settings.autoSync) {
+				if (this.settings.autoSync && file == this.app.workspace.getActiveFile()) {
 					await this.fileSync.handleSync(file);
 				}
 			})
