@@ -1,0 +1,14 @@
+---
+// adapted from https://github.com/pls-rs/pls/blob/572a9b5b17f236b3f22dae63d7517187fd243bf3/docs/src/components/SocialIcons.astro#L6
+import type { Props } from "@astrojs/starlight/props";
+
+import Default from "@astrojs/starlight/components/SocialIcons.astro";
+
+import Stars from "./Stars.astro";
+---
+
+<Default {...Astro.props}><slot /></Default>
+<Stars
+  owner="d-eniz"
+  repo="jupymd"
+/>

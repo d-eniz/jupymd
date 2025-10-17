@@ -1,0 +1,22 @@
+@layer my-reset, starlight, nova, my-overrides;
+
+@layer my-overrides {
+  :root {
+    --cp-primary: #8F77E6;
+    --cp-secondary: #5B3FBF;
+    --color-brand: var(--cp-primary);
+    --sl-color-accent: var(--cp-primary);
+    --sl-color-accent-high: var(--cp-secondary);
+    --sl-color-accent-low: color-mix(in srgb, var(--cp-secondary) 70%, white);
+  }
+
+  .nova-link-button-primary {
+    background-color: var(--cp-primary) !important;
+    border-color: var(--cp-primary) !important;
+  }
+
+  .nova-link-button-primary:hover {
+    background-color: var(--cp-secondary) !important;
+    border-color: var(--cp-secondary) !important;
+  }
+}

@@ -1,0 +1,36 @@
+:root {
+  /* Dark theme (default) */
+  --cp-primary: #8F77E6;
+  --cp-secondary: #5B3FBF;
+
+  --color-brand: var(--cp-primary);
+
+  --sl-color-accent-high: var(--cp-primary);
+  --sl-color-accent: var(--cp-secondary);
+  --sl-color-accent-low: color-mix(in srgb, var(--cp-secondary) 70%, white);
+}
+
+:root[data-theme="light"] {
+  /* Light theme */
+  --cp-primary: #5B3FBF;
+  --cp-secondary: #8F77E6;
+
+  --color-brand: var(--cp-primary);
+
+  --sl-color-accent-high: var(--cp-secondary);
+  --sl-color-accent: var(--cp-primary);
+  --sl-color-accent-low: color-mix(in srgb, var(--cp-primary) 70%, white);
+}
+
+h1[data-page-title],
+a.site-title,
+code.jupymd {
+  font-family: var(--__sl-font-mono);
+  font-weight: bold;
+  color: var(--color-brand);
+}
+
+:root:not([data-theme="light"]) a[aria-current="page"].astro-3ii7xxms,
+:root:not([data-theme="light"]) a[aria-current="page"] .astro-3ii7xxms {
+  color: black !important; /* Ensure visible on primary background */
+}
