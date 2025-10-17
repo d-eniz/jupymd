@@ -1,0 +1,62 @@
+---
+// adapted from https://github.com/pls-rs/pls/blob/main/docs/src/components/Footer.astro
+import EditLink from "@astrojs/starlight/components/EditLink.astro";
+import Pagination from "@astrojs/starlight/components/Pagination.astro";
+
+const year = new Date().getFullYear();
+const author = "Deniz Terzioglu";
+---
+
+<footer class="sl-flex">
+  <div class="meta sl-flex">
+    <a
+      href="https://opensource.org/licenses/MIT"
+      target="_blank"
+      rel="noopener">
+      MIT License © {year} {author}
+    </a>
+    <EditLink {...Astro.props} />
+  </div>
+  <p class="disclaimer">
+    JupyMD is an independent project and not affiliated with Project Jupyter or Obsidian.
+  </p>
+  <Pagination {...Astro.props} />
+</footer>
+
+<style>
+  /* Copied from the `Footer` component. */
+  footer {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .meta {
+    gap: 0.75rem 3rem;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    margin-top: 3rem;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+  .meta > :global(p:only-child) {
+    margin-inline-start: auto;
+  }
+
+  /* Copied from the `EditLink` component. */
+  a {
+    text-decoration: none;
+    color: var(--sl-color-gray-3);
+  }
+  a:hover {
+    color: var(--sl-color-white);
+  }
+
+  a, .disclaimer {
+    text-decoration: none;
+    color: var(--sl-color-gray-3); /* all same color */
+  }
+
+  .disclaimer {
+    font-size: var(--sl-text-xs);
+    margin-top: 0.25rem; /* small spacing under meta */
+  }
+</style>
