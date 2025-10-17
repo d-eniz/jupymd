@@ -3,6 +3,7 @@ import autoImport from "astro-auto-import"
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightThemeNova from 'starlight-theme-nova'
+import starlightSiteGraph from 'starlight-site-graph'
 
 // https://astro.build/config
 export default defineConfig({
@@ -14,12 +15,13 @@ export default defineConfig({
 		}),
 		starlight({
 			plugins: [
-				starlightThemeNova(/* options */), 
+				starlightThemeNova(),
+				starlightSiteGraph()
 			],
 			title: 'JupyMD Docs',
 			logo: {
-				dark: "../assets/jupymd-logo-secondary.png",
-				light: "../assets/jupymd-logo.png",
+				dark: "./src/assets/jupymd-logo-secondary.png",
+				light: "./src/assets/jupymd-logo.png",
 				replacesTitle: true,
 			},
 			favicon: "/jupymd-icon-grey.png",
@@ -29,7 +31,7 @@ export default defineConfig({
 					label: 'Guides',
 					items: [
 						// Each item here is one entry in the navigation menu.
-						{ label: 'Example Guide', slug: 'guides/example' },
+						{ label: 'Getting Started', slug: 'guides/getting-started' },
 					],
 				},
 				{
@@ -44,6 +46,7 @@ export default defineConfig({
 				"./src/styles/nova-overrides.css"
 			],
 			components: {
+				Footer: "./src/components/Footer.astro",
 				SocialIcons: "./src/components/SocialIcons.astro",
 			},
 		}),
