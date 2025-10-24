@@ -2,8 +2,10 @@
 import autoImport from "astro-auto-import"
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
-import starlightThemeNova from 'starlight-theme-nova'
 import starlightSiteGraph from 'starlight-site-graph'
+//import { Prism } from "@astrojs/prism";
+
+
 
 // https://astro.build/config
 export default defineConfig({
@@ -11,12 +13,12 @@ export default defineConfig({
 		autoImport({
 			imports: [
 				"./src/components/Stars.astro",
+
 			]
 		}),
 		starlight({
 			plugins: [
-				starlightThemeNova(),
-				starlightSiteGraph()
+				starlightSiteGraph(),
 			],
 			title: 'JupyMD Docs',
 			logo: {
@@ -28,15 +30,35 @@ export default defineConfig({
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/d-eniz/jupymd' }],
 			sidebar: [
 				{
-					label: 'Guides',
-					items: [
-						// Each item here is one entry in the navigation menu.
-						{ label: 'Getting Started', slug: 'guides/getting-started' },
-					],
+				label: 'About',
+				items: [
+					{ label: 'Introduction', link: '/about/introduction/' }
+				],
 				},
 				{
-					label: 'Reference',
-					autogenerate: { directory: 'reference' },
+				label: 'Guides',
+				items: [
+					{ label: 'Getting Started', link: '/guides/getting-started/' },
+					{ label: 'Configuring', link: '/guides/configuring/' },
+					{ label: 'Selecting Interpreters', link: '/guides/selecting-interpreters/' },
+				],
+				},
+				{
+				label: 'Features',
+				items: [
+					{ label: 'Code Execution', link: '/features/code-execution/' },
+					{ label: 'Notebook / Note Conversion', link: '/features/note-conversion/' },
+					{ label: 'Syncing', link: '/features/syncing/' },
+					{ label: 'Output', link: '/features/output/' },
+				],
+				},
+				{
+				label: 'Contributing',
+				items: [
+					{ label: 'Contribution Guidelines', link: '/contributing/contribution-guidelines/' },
+					{ label: 'Prerequisites', link: '/contributing/prerequisites/' },
+					{ label: 'Checking out Pull Requests', link: '/contributing/pull-requests' },
+				],
 				},
 			],
 			customCss: [
