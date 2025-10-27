@@ -102,6 +102,7 @@ export class CodeExecutor {
 
             exec(`jupytext --sync "${ipynbPath}"`);
         } catch (err) {
+            new Notice("Error updating notebook, check console for details")
             console.error("Error updating notebook:", err);
         }
     }
@@ -265,6 +266,7 @@ while True:
 
             this.pythonProcess.stderr?.setEncoding("utf-8");
             this.pythonProcess.stderr?.on("data", (data) => {
+                new Notice("Python process error, check console for details")
                 console.error("Python process stderr:", data.toString());
             });
 
@@ -281,6 +283,7 @@ while True:
             });
 
             this.pythonProcess.on("error", (error) => {
+                new Notice("Python process error, check console for details")
                 console.error("Python process error:", error);
                 reject(error);
             });
