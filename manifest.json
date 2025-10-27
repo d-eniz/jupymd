@@ -1,7 +1,7 @@
 {
 	"id": "jupymd",
 	"name": "JupyMD",
-	"version": "1.4.4",
+	"version": "1.4.5",
 	"minAppVersion": "1.8.4",
 	"description": "Use Jupyter notebooks in Obsidian.",
 	"author": "Deniz Terzioglu",
