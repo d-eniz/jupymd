@@ -1,6 +1,6 @@
 {
 	"name": "jupymd",
-	"version": "1.4.5",
+	"version": "1.4.6",
 	"description": "Link and sync Markdown notes with Jupyter notebooks via Jupytext.",
 	"main": "main.js",
 	"scripts": {
