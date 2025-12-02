@@ -37,7 +37,7 @@ export async function isNotebookPaired(file: any): Promise<boolean> {
 export async function installLibs(interpreter: string, libraries: string): Promise<void> {
 
 	const execAsync = promisify(exec)
-	const command = `${interpreter} -m pip install ${libraries}`
+	const command = `${shellQuote(interpreter)} -m pip install ${libraries}`
 
 	try {
 		const {stdout, stderr} = await execAsync(command)
@@ -53,4 +53,8 @@ export async function installLibs(interpreter: string, libraries: string): Promi
 		new Notice("Failed to install packages, check console for details.")
 		console.error(err)
 	}
+}
+
+function shellQuote(path: string): string {
+    return `"${path.replace(/(["\\$`])/g, '\\$1')}"`;
 }
