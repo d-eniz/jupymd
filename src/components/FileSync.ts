@@ -167,7 +167,7 @@ export class FileSync {
 				return;
 			}
 
-			exec(`${jupytextCmd} --set-formats ipynb,md "${ipynbPath}"`, (error) => {
+			exec(`${jupytextCmd} "${ipynbPath}" --set-formats ipynb,md --update-metadata '{"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}}'`, (error) => {
 				if (error) {
 					new Notice(`Failed to pair notebook: ${error.message}`);
 					return;
