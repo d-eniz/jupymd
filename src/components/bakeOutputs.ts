@@ -1,9 +1,18 @@
-import { App, TFile, Notice } from "obsidian";
+import { App, TFile, Notice, FileSystemAdapter } from "obsidian";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { getAbsolutePath } from "../utils/helpers";
 
 const OUTPUT_START_MARKER = "<!-- jupymd:output:start -->";
+
+function getAbsolutePathForFile(app: App, file: TFile): string {
+	const adapter = app.vault.adapter;
+	if (adapter instanceof FileSystemAdapter) {
+		const vaultPath = adapter.getBasePath();
+		return path.join(vaultPath, file.path);
+	} else {
+		throw new Error("Cannot get base path: unsupported adapter type.");
+	}
+}
 const OUTPUT_END_MARKER = "<!-- jupymd:output:end -->";
 
 interface JupyterOutput {
@@ -85,7 +94,7 @@ function buildOutputBlock(text: string, images: string[]): string[] {
 }
 
 export async function bakeOutputsForFile(app: App, file: TFile): Promise<void> {
-	const absPath = getAbsolutePath.call({ app }, file);
+	const absPath = getAbsolutePathForFile(app, file);
 	const ipynbPath = absPath.replace(/\.md$/, ".ipynb");
 
 	let notebookRaw: string;
