@@ -1,10 +1,11 @@
 import JupyMDPlugin from "../main";
-import {App, Notice} from "obsidian";
+import {App, Notice, TFile} from "obsidian";
 import {exec} from "child_process";
 import {getAbsolutePath} from "../utils/helpers";
 import {CodeBlock} from "./types";
 import * as fs from "fs/promises";
 import {spawn, ChildProcess} from "child_process";
+import {bakeOutputsForFile} from "./bakeOutputs";
 
 export class CodeExecutor {
     private currentNotePath: string | null = null;
@@ -100,7 +101,18 @@ export class CodeExecutor {
             cell.metadata.jupyter = {is_executing: false};
             await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
 
-            exec(`jupytext --sync "${ipynbPath}"`);
+            exec(`jupytext --sync "${ipynbPath}"`, async () => {
+                if (this.plugin.settings.embedOutputs) {
+                    const activeFile = this.app.workspace.getActiveFile();
+                    if (activeFile && activeFile.extension === "md") {
+                        try {
+                            await bakeOutputsForFile(this.app, activeFile);
+                        } catch (e) {
+                            console.error("JupyMD auto-bake error:", e);
+                        }
+                    }
+                }
+            });
         } catch (err) {
             new Notice("Error updating notebook, check console for details")
             console.error("Error updating notebook:", err);

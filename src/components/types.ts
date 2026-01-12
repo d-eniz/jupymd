@@ -4,6 +4,7 @@ export type JupyMDPluginSettings = {
 	pythonInterpreter: string;
 	notebookEditorCommand: string;
 	enableCodeBlocks: boolean;
+	embedOutputs: boolean;
 }
 
 export const DEFAULT_SETTINGS: JupyMDPluginSettings = {
@@ -12,6 +13,7 @@ export const DEFAULT_SETTINGS: JupyMDPluginSettings = {
 	pythonInterpreter: "",
 	notebookEditorCommand: "jupyter-lab",
 	enableCodeBlocks: true,
+	embedOutputs: false,
 };
 
 export type CodeBlock = {
