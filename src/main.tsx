@@ -1,4 +1,4 @@
-import { Plugin, TFile } from "obsidian";
+import { Plugin, TFile, MarkdownPostProcessorContext } from "obsidian";
 import { JupyMDSettingTab } from "./components/Settings";
 import { CodeExecutor } from "./components/CodeExecutor";
 import { FileSync } from "./components/FileSync";
@@ -14,9 +14,13 @@ export default class JupyMDPlugin extends Plugin {
 	executor: CodeExecutor;
 	fileSync: FileSync;
 	currentNotePath: string | null = null;
+	private styleEl: HTMLStyleElement | null = null;
 
 	async onload() {
 		await this.loadSettings();
+
+		this.injectBakedOutputStyles();
+		this.registerMarkdownPostProcessor(this.hideBakedOutputsPostProcessor.bind(this));
 
 		if (!this.settings.pythonInterpreter) {
 			this.settings.pythonInterpreter = getDefaultPythonPath();
@@ -110,5 +114,44 @@ export default class JupyMDPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	private injectBakedOutputStyles(): void {
+		this.styleEl = document.createElement("style");
+		this.styleEl.textContent = `
+			/* Hide baked outputs in Obsidian UI - they are already rendered by the plugin */
+			.jupymd-baked-output {
+				display: none !important;
+			}
+		`;
+		document.head.appendChild(this.styleEl);
+		this.register(() => this.styleEl?.remove());
+	}
+
+	private hideBakedOutputsPostProcessor(el: HTMLElement, ctx: MarkdownPostProcessorContext): void {
+		const walker = document.createTreeWalker(el, NodeFilter.SHOW_COMMENT);
+		const startNodes: Comment[] = [];
+		const endNodes: Comment[] = [];
+
+		while (walker.nextNode()) {
+			const n = walker.currentNode as Comment;
+			const trimmed = n.data.trim();
+			if (trimmed === "jupymd:output:start") startNodes.push(n);
+			if (trimmed === "jupymd:output:end") endNodes.push(n);
+		}
+
+		for (let i = 0; i < startNodes.length; i++) {
+			const start = startNodes[i];
+			const end = endNodes[i];
+			if (!end) continue;
+
+			let cursor: Node | null = start.nextSibling;
+			while (cursor && cursor !== end) {
+				if (cursor.nodeType === Node.ELEMENT_NODE) {
+					(cursor as HTMLElement).classList.add("jupymd-baked-output");
+				}
+				cursor = cursor.nextSibling;
+			}
+		}
 	}
 }

@@ -15,7 +15,7 @@ function getAbsolutePathForFile(app: App, file: TFile): string {
 }
 const OUTPUT_END_MARKER = "<!-- jupymd:output:end -->";
 
-interface JupyterOutput {
+type JupyterOutput = {
 	output_type: string;
 	name?: string;
 	text?: string | string[];
@@ -24,22 +24,22 @@ interface JupyterOutput {
 		"image/png"?: string;
 	};
 	metadata?: Record<string, unknown>;
-}
+};
 
-interface JupyterCell {
+type JupyterCell = {
 	cell_type: string;
 	source: string | string[];
 	outputs?: JupyterOutput[];
 	execution_count?: number;
 	metadata?: Record<string, unknown>;
-}
+};
 
-interface JupyterNotebook {
+type JupyterNotebook = {
 	cells: JupyterCell[];
 	metadata?: Record<string, unknown>;
 	nbformat?: number;
 	nbformat_minor?: number;
-}
+};
 
 function normalizeText(text: string | string[] | undefined): string {
 	if (!text) return "";

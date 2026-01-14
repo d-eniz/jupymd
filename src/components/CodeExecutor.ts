@@ -5,7 +5,7 @@ import {getAbsolutePath} from "../utils/helpers";
 import {CodeBlock} from "./types";
 import * as fs from "fs/promises";
 import {spawn, ChildProcess} from "child_process";
-import {bakeOutputsForFile} from "./bakeOutputs";
+import {bakeOutputsForFile} from "./BakeOutputs";
 
 export class CodeExecutor {
     private currentNotePath: string | null = null;

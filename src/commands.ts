@@ -1,6 +1,6 @@
 import { Notice } from "obsidian";
 import JupyMDPlugin from "./main";
-import { bakeOutputsForFile, clearBakedOutputs } from "./components/bakeOutputs";
+import { bakeOutputsForFile, clearBakedOutputs } from "./components/BakeOutputs";
 
 export function registerCommands(plugin: JupyMDPlugin) {
 	const { fileSync } = plugin;
