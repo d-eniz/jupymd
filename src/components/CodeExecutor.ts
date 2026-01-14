@@ -5,7 +5,7 @@ import {getAbsolutePath} from "../utils/helpers";
 import {CodeBlock} from "./types";
 import * as fs from "fs/promises";
 import {spawn, ChildProcess} from "child_process";
-import {bakeOutputsForFile} from "./BakeOutputs";
+
 
 export class CodeExecutor {
     private currentNotePath: string | null = null;
@@ -101,18 +101,7 @@ export class CodeExecutor {
             cell.metadata.jupyter = {is_executing: false};
             await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
 
-            exec(`jupytext --sync "${ipynbPath}"`, async () => {
-                if (this.plugin.settings.embedOutputs) {
-                    const activeFile = this.app.workspace.getActiveFile();
-                    if (activeFile && activeFile.extension === "md") {
-                        try {
-                            await bakeOutputsForFile(this.app, activeFile);
-                        } catch (e) {
-                            console.error("JupyMD auto-bake error:", e);
-                        }
-                    }
-                }
-            });
+            exec(`jupytext --sync "${ipynbPath}"`);
         } catch (err) {
             new Notice("Error updating notebook, check console for details")
             console.error("Error updating notebook:", err);

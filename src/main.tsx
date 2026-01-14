@@ -1,26 +1,22 @@
-import { Plugin, TFile, MarkdownPostProcessorContext } from "obsidian";
+import { Plugin, TFile } from "obsidian";
 import { JupyMDSettingTab } from "./components/Settings";
 import { CodeExecutor } from "./components/CodeExecutor";
 import { FileSync } from "./components/FileSync";
 import { DEFAULT_SETTINGS, JupyMDPluginSettings } from "./components/types";
 import { registerCommands } from "./commands";
-import { createRoot } from "react-dom/client";
-import { PythonCodeBlock } from "./components/CodeBlock";
-import { getAbsolutePath } from "./utils/helpers";
 import { getDefaultPythonPath } from "./utils/pythonPathUtils";
+import { renderStaticCodeBlock } from "./components/StaticCodeBlock";
 
 export default class JupyMDPlugin extends Plugin {
 	settings: JupyMDPluginSettings;
 	executor: CodeExecutor;
 	fileSync: FileSync;
 	currentNotePath: string | null = null;
-	private styleEl: HTMLStyleElement | null = null;
 
 	async onload() {
 		await this.loadSettings();
 
-		this.injectBakedOutputStyles();
-		this.registerMarkdownPostProcessor(this.hideBakedOutputsPostProcessor.bind(this));
+
 
 		if (!this.settings.pythonInterpreter) {
 			this.settings.pythonInterpreter = getDefaultPythonPath();
@@ -45,56 +41,40 @@ export default class JupyMDPlugin extends Plugin {
 		if (this.settings.enableCodeBlocks) {
 			this.registerMarkdownCodeBlockProcessor(
 				"python",
-				(source, el, ctx) => {
-					el.empty();
-					const reactRoot = document.createElement("div");
-					el.appendChild(reactRoot);
-
+				async (source, el, ctx) => {
 					const activeFile = this.app.workspace.getActiveFile();
 
-					let index = 0;
+					let cellIndex = 0;
 					if (activeFile) {
-						const filePath = getAbsolutePath(activeFile);
-						const fileContent = this.app.vault.read(activeFile);
+						const content = await this.app.vault.read(activeFile);
+						const lines = content.split("\n");
+						let blockCount = 0;
 
-						fileContent.then((content) => {
-							const lines = content.split("\n");
-							let blockCount = 0;
-							let foundCurrentBlock = false;
-
-							const sectionInfo = ctx.getSectionInfo(el);
-							if (!sectionInfo) return;
-
+						const sectionInfo = ctx.getSectionInfo(el);
+						if (sectionInfo) {
 							for (let i = 0; i < lines.length; i++) {
 								const line = lines[i].trim();
 								if (line.startsWith("```python")) {
 									if (i < sectionInfo.lineStart) {
 										blockCount++;
 									} else if (i === sectionInfo.lineStart) {
-										foundCurrentBlock = true;
+										cellIndex = blockCount;
 										break;
 									}
 								}
 							}
-
-							if (foundCurrentBlock) {
-								index = blockCount;
-								createRoot(reactRoot).render(
-									<PythonCodeBlock
-										code={source}
-										path={filePath}
-										index={index}
-										executor={this.executor}
-										plugin={this}
-									/>
-								);
-							}
-						});
-					} else {
-						createRoot(reactRoot).render(
-							<PythonCodeBlock code={source} />
-						);
+						}
 					}
+
+					await renderStaticCodeBlock(
+						this.app,
+						activeFile,
+						source,
+						cellIndex,
+						el,
+						this.executor,
+						this
+					);
 				}
 			);
 		}
@@ -114,44 +94,5 @@ export default class JupyMDPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-	}
-
-	private injectBakedOutputStyles(): void {
-		this.styleEl = document.createElement("style");
-		this.styleEl.textContent = `
-			/* Hide baked outputs in Obsidian UI - they are already rendered by the plugin */
-			.jupymd-baked-output {
-				display: none !important;
-			}
-		`;
-		document.head.appendChild(this.styleEl);
-		this.register(() => this.styleEl?.remove());
-	}
-
-	private hideBakedOutputsPostProcessor(el: HTMLElement, ctx: MarkdownPostProcessorContext): void {
-		const walker = document.createTreeWalker(el, NodeFilter.SHOW_COMMENT);
-		const startNodes: Comment[] = [];
-		const endNodes: Comment[] = [];
-
-		while (walker.nextNode()) {
-			const n = walker.currentNode as Comment;
-			const trimmed = n.data.trim();
-			if (trimmed === "jupymd:output:start") startNodes.push(n);
-			if (trimmed === "jupymd:output:end") endNodes.push(n);
-		}
-
-		for (let i = 0; i < startNodes.length; i++) {
-			const start = startNodes[i];
-			const end = endNodes[i];
-			if (!end) continue;
-
-			let cursor: Node | null = start.nextSibling;
-			while (cursor && cursor !== end) {
-				if (cursor.nodeType === Node.ELEMENT_NODE) {
-					(cursor as HTMLElement).classList.add("jupymd-baked-output");
-				}
-				cursor = cursor.nextSibling;
-			}
-		}
 	}
 }

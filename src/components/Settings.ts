@@ -103,15 +103,6 @@ export class JupyMDSettingTab extends PluginSettingTab {
                 })
             })
 
-        new Setting(containerEl)
-            .setName("Embed outputs in Markdown")
-            .setDesc("Automatically embed code outputs into the Markdown file after execution. Useful for PDF exports and static site generators like Quartz.")
-            .addToggle((toggle) => {
-                toggle.setValue(this.plugin.settings.embedOutputs)
-                toggle.onChange(async (value) => {
-                    this.plugin.settings.embedOutputs = value;
-                    await this.plugin.saveSettings();
-                })
-            })
+
     }
 }

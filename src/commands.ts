@@ -1,6 +1,4 @@
-import { Notice } from "obsidian";
 import JupyMDPlugin from "./main";
-import { bakeOutputsForFile, clearBakedOutputs } from "./components/BakeOutputs";
 
 export function registerCommands(plugin: JupyMDPlugin) {
 	const { fileSync } = plugin;
@@ -34,43 +32,5 @@ export function registerCommands(plugin: JupyMDPlugin) {
 		id: "force-sync",
 		name: "Sync files",
 		callback: () => fileSync.handleSync(undefined, true),
-	});
-
-	plugin.addCommand({
-		id: "bake-outputs",
-		name: "Bake outputs into markdown",
-		callback: async () => {
-			const file = plugin.app.workspace.getActiveFile();
-			if (!file || file.extension !== "md") {
-				new Notice("JupyMD: Please open a markdown file first.");
-				return;
-			}
-			try {
-				await bakeOutputsForFile(plugin.app, file);
-				new Notice("JupyMD: Outputs baked into markdown.");
-			} catch (e) {
-				console.error("JupyMD bake error:", e);
-				new Notice(`JupyMD: Failed to bake outputs. ${e instanceof Error ? e.message : ""}`);
-			}
-		},
-	});
-
-	plugin.addCommand({
-		id: "clear-baked-outputs",
-		name: "Clear baked outputs from markdown",
-		callback: async () => {
-			const file = plugin.app.workspace.getActiveFile();
-			if (!file || file.extension !== "md") {
-				new Notice("JupyMD: Please open a markdown file first.");
-				return;
-			}
-			try {
-				await clearBakedOutputs(plugin.app, file);
-				new Notice("JupyMD: Baked outputs cleared.");
-			} catch (e) {
-				console.error("JupyMD clear error:", e);
-				new Notice(`JupyMD: Failed to clear outputs. ${e instanceof Error ? e.message : ""}`);
-			}
-		},
 	});
 }
