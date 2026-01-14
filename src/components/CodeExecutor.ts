@@ -1,11 +1,10 @@
 import JupyMDPlugin from "../main";
-import {App, Notice, TFile} from "obsidian";
+import {App, Notice} from "obsidian";
 import {exec} from "child_process";
 import {getAbsolutePath} from "../utils/helpers";
 import {CodeBlock} from "./types";
 import * as fs from "fs/promises";
 import {spawn, ChildProcess} from "child_process";
-
 
 export class CodeExecutor {
     private currentNotePath: string | null = null;

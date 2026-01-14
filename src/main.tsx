@@ -16,8 +16,6 @@ export default class JupyMDPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-
-
 		if (!this.settings.pythonInterpreter) {
 			this.settings.pythonInterpreter = getDefaultPythonPath();
 			await this.saveSettings();

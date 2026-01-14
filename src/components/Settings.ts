@@ -102,7 +102,5 @@ export class JupyMDSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 })
             })
-
-
     }
 }
