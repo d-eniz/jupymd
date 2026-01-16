@@ -39,53 +39,62 @@ export default class JupyMDPlugin extends Plugin {
 		);
 
 		if (this.settings.enableCodeBlocks) {
-			this.registerMarkdownCodeBlockProcessor(
+			await this.registerMarkdownCodeBlockProcessor(
 				"python",
-				(source, el, ctx) => {
+				async (source, el, ctx) => {
 					el.empty();
 					const reactRoot = document.createElement("div");
 					el.appendChild(reactRoot);
 
-					const activeFile = this.app.workspace.getActiveFile();
+					const activeFile = this.app.vault.getFileByPath(ctx.sourcePath);
 
 					let index = 0;
 					if (activeFile) {
 						const filePath = getAbsolutePath(activeFile);
-						const fileContent = this.app.vault.read(activeFile);
+						const fileContent = await this.app.vault.read(activeFile);
+						const lines = fileContent.split("\n");
+						let blockCount = 0;
+						let foundCurrentBlock = false;
 
-						fileContent.then((content) => {
-							const lines = content.split("\n");
-							let blockCount = 0;
-							let foundCurrentBlock = false;
+						const sectionInfo = ctx.getSectionInfo(el);
+						if (!sectionInfo) {
+							const root = createRoot(reactRoot);
+							root.render(
+								<PythonCodeBlock
+									code={source}
+									path={filePath}
+									index={0}
+									executor={this.executor}
+									plugin={this}
+								/>
+							);
+							return;
+						}
 
-							const sectionInfo = ctx.getSectionInfo(el);
-							if (!sectionInfo) return;
-
-							for (let i = 0; i < lines.length; i++) {
-								const line = lines[i].trim();
-								if (line.startsWith("```python")) {
-									if (i < sectionInfo.lineStart) {
-										blockCount++;
-									} else if (i === sectionInfo.lineStart) {
-										foundCurrentBlock = true;
-										break;
-									}
+						for (let i = 0; i < lines.length; i++) {
+							const line = lines[i].trim();
+							if (line.startsWith("```python")) {
+								if (i < sectionInfo.lineStart) {
+									blockCount++;
+								} else if (i === sectionInfo.lineStart) {
+									foundCurrentBlock = true;
+									break;
 								}
 							}
+						}
 
-							if (foundCurrentBlock) {
-								index = blockCount;
-								createRoot(reactRoot).render(
-									<PythonCodeBlock
-										code={source}
-										path={filePath}
-										index={index}
-										executor={this.executor}
-										plugin={this}
-									/>
-								);
-							}
-						});
+						if (foundCurrentBlock) {
+							index = blockCount;
+							createRoot(reactRoot).render(
+								<PythonCodeBlock
+									code={source}
+									path={filePath}
+									index={index}
+									executor={this.executor}
+									plugin={this}
+								/>
+							);
+						}
 					} else {
 						createRoot(reactRoot).render(
 							<PythonCodeBlock code={source} />
