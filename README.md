@@ -45,11 +45,30 @@ With JupyMD you can:
   `pip install notebook`
 - [Jupytext](https://github.com/mwouts/jupytext)
   `pip install jupytext`
+- [Matplotlib](https://matplotlib.org/)
+  `pip install matplotlib`
 
 
 ## Getting started
 
-Download the plugin through the [Obsidian community plugin browser](obsidian://show-plugin?id=jupymd) and enable it. If not yet installed, install Jupyter notebook and Jupytext through pip.
+Download the plugin through the [Obsidian community plugin browser](obsidian://show-plugin?id=jupymd) and enable it.
+
+### Setup
+The default settings assume Python is in your system's `PATH`. It is highly recommended to set the interpreter to a [virtual environment](https://docs.python.org/3/library/venv.html) instead.
+
+In a directory where you want your virtual environment to be stored in:
+```bash
+python -m venv <venv>
+```
+
+To use the virtual environment within JupyMD, go to the plugin settings, and insert your venv interpreter location:
+
+```bash
+/<venv>/bin/python # for Linux/MacOS
+\<venv>\Scripts\python.exe # for Windows
+```
+
+Afterwards, restart Obsidian. Once loaded, go back to the JupyMD settings, and click on the "Install Libraries" button. This will install Jupytext and Matplotlib to your specified Python interpreter.
 
 ### To convert a note to a Jupyter notebook
 Execute the following command on a note you want Jupyter notebook capability on:
@@ -64,6 +83,8 @@ Open a `.ipynb` file in Obsidian and execute:
 This will create a Markdown note (`.md`) with the same file name as the notebook, and set up bidirectional sync between the notebook and the note.
 
 ## Contributing
+
+Please read the [contribution guidelines](https://github.com/d-eniz/jupymd/blob/master/CONTRIBUTING.md) if you want to contribute to JupyMD.
 
 This project was originally built to solve a personal problem, and it's still in an early stage. Feedback, bug reports, and pull requests are all welcome and appreciated!
 
