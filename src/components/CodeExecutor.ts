@@ -4,6 +4,7 @@ import {exec} from "child_process";
 import {getAbsolutePath} from "../utils/helpers";
 import {CodeBlock} from "./types";
 import * as fs from "fs/promises";
+import * as path from "path";
 import {spawn, ChildProcess} from "child_process";
 
 export class CodeExecutor {
@@ -226,10 +227,18 @@ while True:
         sys.stdout.flush()
 `;
 
+            const workingDir = this.currentNotePath 
+                ? path.dirname(this.currentNotePath)
+                : process.cwd();
+
+
             this.pythonProcess = spawn(
                 this.plugin.settings.pythonInterpreter,
                 ["-c", initCode],
-                { env: { ...process.env } }
+                { 
+                    env: { ...process.env },
+                    cwd: workingDir
+                }
             );
 
             let initOutput = "";
