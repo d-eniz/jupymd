@@ -167,7 +167,12 @@ export class FileSync {
 				return;
 			}
 
-			exec(`${jupytextCmd} "${ipynbPath}" --set-formats ipynb,md --update-metadata '{"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}}'`, (error) => {
+			const isWindows = process.platform === 'win32';
+			const metadata = isWindows
+				? '"{\\"kernelspec"\\: {\\"display_name\\": \\"Python 3\\", \\"language\\": \\"python\\", \\"name\\": \\"python3\\"}}"'
+				: '\'{"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}}\'';
+
+			exec(`${jupytextCmd} "${ipynbPath}" --set-formats ipynb,md --update-metadata ${metadata}`, (error) => {
 				if (error) {
 					new Notice(`Failed to pair notebook: ${error.message}`);
 					return;
