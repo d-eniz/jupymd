@@ -2,6 +2,7 @@ import {App, Notice, TFile, MarkdownView} from "obsidian";
 import {exec, execFile} from "child_process";
 import {getAbsolutePath, isNotebookPaired} from "../utils/helpers";
 import {JupyMDPluginSettings} from "./types";
+import * as fs from "fs";
 
 export class FileSync {
 	private readonly pythonPath: string;
@@ -136,7 +137,7 @@ export class FileSync {
 		const file = files.find(f => f.path === selected);
 		if (!file) return;
 
-		const absPath = getAbsolutePath.call(this, file);
+		const absPath = getAbsolutePath(file);
 		const mdPath = absPath.replace(/\.ipynb$/, ".md");
 
 		try {
@@ -146,7 +147,7 @@ export class FileSync {
 			new Notice(`Note created and paired: ${mdPath}`);
 
 			const mdRelative = this.app.vault.getFiles().find(
-				f => getAbsolutePath.call(this, f) === mdPath
+				f => getAbsolutePath(f) === mdPath
 			);
 
 			if (mdRelative) {
@@ -167,12 +168,16 @@ export class FileSync {
 		const mdPath = getAbsolutePath(activeFile);
 		const ipynbPath = mdPath.replace(/\.md$/, ".ipynb");
 
-		if (await isNotebookPaired(activeFile)) {
+		if (await isNotebookPaired(this.app, activeFile)) {
 			new Notice("Notebook is already paired with this note.");
 			return;
 		}
 
 		try {
+			if (fs.existsSync(ipynbPath)) {
+				fs.unlinkSync(ipynbPath)
+			}
+
 			await this.runJupytext(["--to", "notebook", mdPath]);
 
 			const metadata = JSON.stringify({
@@ -209,7 +214,7 @@ export class FileSync {
 			return;
 		}
 
-		if (!(await isNotebookPaired(activeFile))) {
+		if (!(await isNotebookPaired(this.app, activeFile))) {
 			return;
 		}
 
@@ -231,7 +236,7 @@ export class FileSync {
 	}
 
 	async syncFiles(file: TFile) {
-		if (!(await isNotebookPaired(file))) return;
+		if (!(await isNotebookPaired(this.app, file))) return;
 
 		const filePath = getAbsolutePath(file);
 		const ipynbPath = filePath.replace(/\.md$/, ".ipynb");
