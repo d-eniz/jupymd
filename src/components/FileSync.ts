@@ -1,8 +1,7 @@
-import { App, Notice, TFile, MarkdownView } from "obsidian";
-import { exec } from "child_process";
-import { getAbsolutePath, isNotebookPaired } from "../utils/helpers";
-import { getPackageExecutablePath } from "../utils/pythonPathUtils";
-import { JupyMDPluginSettings } from "./types"; 
+import {App, Notice, TFile, MarkdownView} from "obsidian";
+import {exec, execFile} from "child_process";
+import {getAbsolutePath, isNotebookPaired} from "../utils/helpers";
+import {JupyMDPluginSettings} from "./types";
 
 export class FileSync {
 	private readonly pythonPath: string;
@@ -16,6 +15,23 @@ export class FileSync {
 	constructor(private app: App, pythonPath: string, settings: JupyMDPluginSettings) {
 		this.pythonPath = pythonPath;
 		this.settings = settings;
+	}
+
+	private runJupytext(args: string[]): Promise<void> {
+		return new Promise((resolve, reject) => {
+			execFile(
+				this.pythonPath,
+				["-m", "jupytext", ...args],
+				(error, stdout, stderr) => {
+					if (error) {
+						console.error(stderr || error.message);
+						reject(error);
+						return;
+					}
+					resolve();
+				}
+			);
+		});
 	}
 
 	public isSyncBlocked(): boolean {
@@ -122,27 +138,23 @@ export class FileSync {
 
 		const absPath = getAbsolutePath.call(this, file);
 		const mdPath = absPath.replace(/\.ipynb$/, ".md");
-		const jupytextCmd = getPackageExecutablePath("jupytext", this.pythonPath);
 
-		exec(`${jupytextCmd} --to markdown "${absPath}"`, (error) => {
-			if (error) {
-				new Notice(`Failed to convert notebook: ${error.message}`);
-				return;
+		try {
+			await this.runJupytext(["--to", "markdown", absPath]);
+			await this.runJupytext(["--set-formats", "ipynb,md", absPath]);
+
+			new Notice(`Note created and paired: ${mdPath}`);
+
+			const mdRelative = this.app.vault.getFiles().find(
+				f => getAbsolutePath.call(this, f) === mdPath
+			);
+
+			if (mdRelative) {
+				this.app.workspace.openLinkText(mdRelative.path, '', true);
 			}
-
-			exec(`${jupytextCmd} --set-formats ipynb,md "${absPath}"`, (pairError) => {
-				if (pairError) {
-					new Notice(`Failed to pair notebook and note: ${pairError.message}`);
-					return;
-				}
-				new Notice(`Note created and paired: ${mdPath}`);
-				// Open the new note in Obsidian
-				const mdRelative = this.app.vault.getFiles().find(f => getAbsolutePath.call(this, f) === mdPath);
-				if (mdRelative) {
-					this.app.workspace.openLinkText(mdRelative.path, '', true);
-				}
-			});
-		});
+		} catch (error: any) {
+			new Notice(`Failed to convert notebook: ${error.message}`);
+		}
 	}
 
 	async createNotebook() {
@@ -159,34 +171,35 @@ export class FileSync {
 			new Notice("Notebook is already paired with this note.");
 			return;
 		}
-		const jupytextCmd = getPackageExecutablePath("jupytext", this.pythonPath);
 
-		exec(`${jupytextCmd} --to notebook "${mdPath}"`, (error) => {
-			if (error) {
-				new Notice(`Failed to create notebook: ${error.message}`);
-				return;
-			}
+		try {
+			await this.runJupytext(["--to", "notebook", mdPath]);
 
-			const isWindows = process.platform === 'win32';
-			const metadata = isWindows
-				? '"{\\"kernelspec"\\: {\\"display_name\\": \\"Python 3\\", \\"language\\": \\"python\\", \\"name\\": \\"python3\\"}}"'
-				: '\'{"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}}\'';
-
-			exec(`${jupytextCmd} "${ipynbPath}" --set-formats ipynb,md --update-metadata ${metadata}`, (error) => {
-				if (error) {
-					new Notice(`Failed to pair notebook: ${error.message}`);
-					return;
-				}
-
-				const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-				const leaf = this.app.workspace.getLeavesOfType(
-					view?.getViewType() ?? ""
-				)[0];
-				(leaf as any).rebuildView(); // Refresh
-
-				new Notice(`Notebook created and paired: ${ipynbPath}`);
+			const metadata = JSON.stringify({
+				kernelspec: {
+					display_name: "Python 3",
+					language: "python",
+					name: "python3",
+				},
 			});
-		});
+
+			await this.runJupytext([
+				ipynbPath,
+				"--set-formats", "ipynb,md",
+				"--update-metadata", metadata,
+			]);
+
+			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+			const leaf = this.app.workspace.getLeavesOfType(
+				view?.getViewType() ?? ""
+			)[0];
+
+			(leaf as any).rebuildView();
+
+			new Notice(`Notebook created and paired: ${ipynbPath}`);
+		} catch (error: any) {
+			new Notice(`Failed to create notebook: ${error.message}`);
+		}
 	}
 
 	async openNotebookInEditor(editor: string) {
@@ -218,30 +231,19 @@ export class FileSync {
 	}
 
 	async syncFiles(file: TFile) {
-
-		if (!await isNotebookPaired(file)) {
-			return;
-		}
+		if (!(await isNotebookPaired(file))) return;
 
 		const filePath = getAbsolutePath(file);
-
 		const ipynbPath = filePath.replace(/\.md$/, ".ipynb");
 
-		const jupytextCmd = getPackageExecutablePath("jupytext", this.pythonPath);
-
-		let syncCmd: string;
-		if (this.settings.bidirectionalSync) {
-			syncCmd = `--sync "${ipynbPath}"`;
-		} else {
-			syncCmd = `--to ipynb "${filePath}"`;
-		}
-
-		exec(`${jupytextCmd} ${syncCmd}`, (error) => {
-			if (error) {
-				console.error(
-					`Failed to sync Markdown file: ${error.message}`
-				);
+		try {
+			if (this.settings.bidirectionalSync) {
+				await this.runJupytext(["--sync", ipynbPath]);
+			} else {
+				await this.runJupytext(["--to", "ipynb", filePath]);
 			}
-		});
+		} catch (error: any) {
+			console.error(`Failed to sync Markdown file: ${error.message}`);
+		}
 	}
 }
