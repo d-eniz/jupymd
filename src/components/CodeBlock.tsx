@@ -82,7 +82,7 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 	const reindexBlock = async () => {
 		if (!path) return;
 
-		if (!await isNotebookPaired(activeFile)) {
+		if (!await isNotebookPaired(plugin.app, activeFile)) {
 			return;
 		}
 
@@ -103,7 +103,7 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 		if (!executor || !path || currentIndex === undefined) return;
 
 		try {
-			if (!await isNotebookPaired(activeFile)) {
+			if (!await isNotebookPaired(plugin.app, activeFile)) {
 				setOutput("");
 				setHasOutput(false);
 				return;
@@ -175,25 +175,25 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 
 	const waitForSyncUnblocked = async (): Promise<boolean> => {
 		const startTime = Date.now();
-		
+
 		return new Promise((resolve) => {
 			const checkSync = () => {
 				const elapsedTime = Date.now() - startTime;
-				
+
 				if (elapsedTime >= MAX_SYNC_WAIT_TIME) {
 					console.warn("Max sync wait time exceeded, proceeding with execution");
 					resolve(false);
 					return;
 				}
-				
+
 				if (!plugin?.fileSync?.isSyncBlocked?.()) {
 					resolve(true);
 					return;
 				}
-				
+
 				setTimeout(checkSync, SYNC_CHECK_INTERVAL);
 			};
-			
+
 			checkSync();
 		});
 	};
@@ -228,7 +228,7 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 
 			setTimeout(async () => {
 				await renderOutputs();
-				await fs.utimes(path, new Date(), new Date()); 
+				await fs.utimes(path, new Date(), new Date());
 				/* when the output is pushed to the .ipynb file, the modification time 
 				of it becomes more recent than the markdown file's. this causes the sync
 				to be biased towards the .ipynb file which in reality is older than the
@@ -293,11 +293,21 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 	useEffect(() => {
 		const checkPairing = async () => {
 			if (activeFile) {
-				const paired = await isNotebookPaired(activeFile);
+				const paired = await isNotebookPaired(plugin.app, activeFile);
 				setIsPaired(paired);
 			}
 		};
 		checkPairing();
+
+		const eventRef = plugin.app.metadataCache.on("changed", (file: { path: any; }) => {
+			if (activeFile && file.path === activeFile.path) {
+				checkPairing();
+			}
+		});
+
+		return () => {
+			plugin.app.metadataCache.offref(eventRef);
+		};
 	}, [activeFile]);
 
 	return (
@@ -335,7 +345,7 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 				/>
 			</div>
 
-			{hasOutput && (
+			{isPaired && hasOutput && (
 				<pre className="code-output">
                     {output}
                 </pre>
@@ -343,4 +353,3 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 		</div>
 	);
 };
-
