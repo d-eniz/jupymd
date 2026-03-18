@@ -1,11 +1,13 @@
-import {promises as fs} from "fs";
 import {exec} from "child_process";
 import {promisify} from "util";
 import * as path from "path";
-import {FileSystemAdapter, TFile, Notice} from "obsidian";
+import * as fs from "fs";
+import {App, FileSystemAdapter, TFile, Notice} from "obsidian";
 
 export function getAbsolutePath(file: TFile): string {
-	const adapter = this.app.vault.adapter;
+	if (!file) return "";
+
+	const adapter = file.vault.adapter;
 	if (adapter instanceof FileSystemAdapter) {
 		const vaultPath = adapter.getBasePath();
 		return path.join(vaultPath, file.path);
@@ -14,24 +16,22 @@ export function getAbsolutePath(file: TFile): string {
 	}
 }
 
-export async function isNotebookPaired(file: any): Promise<boolean> {
-	const absPath = getAbsolutePath(file);
-	let targetPath: string;
+export async function isNotebookPaired(app: App, file: TFile): Promise<boolean> {
+	if (!file) return false;
 
-	if (absPath.endsWith(".md")) {
-		targetPath = absPath.replace(/\.md$/, ".ipynb");
-	} else if (absPath.endsWith(".ipynb")) {
-		targetPath = absPath.replace(/\.ipynb$/, ".md");
-	} else {
+	const mdPath = getAbsolutePath(file);
+	if (!mdPath) return false;
+
+	const ipynbPath = mdPath.replace(/\.md$/, ".ipynb");
+
+	if (!fs.existsSync(ipynbPath)) {
 		return false;
 	}
 
-	try {
-		await fs.access(targetPath, fs.constants.F_OK);
-		return true;
-	} catch {
-		return false;
-	}
+	const cache = app.metadataCache.getFileCache(file);
+	const frontmatter = cache?.frontmatter;
+
+	return !!(frontmatter && (frontmatter.jupyter !== undefined || frontmatter.jupytext !== undefined));
 }
 
 export async function installLibs(interpreter: string, libraries: string): Promise<void> {
@@ -47,14 +47,13 @@ export async function installLibs(interpreter: string, libraries: string): Promi
 		if (stderr) {
 			new Notice("Warnings issued for installation, check console for details.");
 			console.error(stderr)
-		} 
-	} 
-	catch(err) {
+		}
+	} catch (err) {
 		new Notice("Failed to install packages, check console for details.")
 		console.error(err)
 	}
 }
 
 function shellQuote(path: string): string {
-    return `"${path.replace(/(["\\$`])/g, '\\$1')}"`;
+	return `"${path.replace(/(["\\$`])/g, '\\$1')}"`;
 }
