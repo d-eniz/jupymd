@@ -68,6 +68,11 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 
 		try {
 			const ipynbPath = path.replace(/\.md$/, ".ipynb");
+			try {
+				await fs.access(ipynbPath);
+			} catch (e) {
+				return [];
+			}
 			const raw = await fs.readFile(ipynbPath, "utf-8");
 			const notebook = JSON.parse(raw);
 			return notebook.cells
@@ -110,6 +115,12 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 			}
 
 			const ipynbPath = path.replace(/\.md$/, ".ipynb");
+			try {
+				await fs.access(ipynbPath);
+			} catch (e) {
+				return;
+			}
+			
 			const raw = await fs.readFile(ipynbPath, "utf-8");
 			const notebook = JSON.parse(raw);
 			const cells = notebook.cells.filter((c: { cell_type: string }) => c.cell_type === "code");
@@ -228,7 +239,11 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 
 			setTimeout(async () => {
 				await renderOutputs();
-				await fs.utimes(path, new Date(), new Date());
+				try {
+					await fs.utimes(path, new Date(), new Date());
+				} catch(e) {
+					// ignore
+				}
 				/* when the output is pushed to the .ipynb file, the modification time 
 				of it becomes more recent than the markdown file's. this causes the sync
 				to be biased towards the .ipynb file which in reality is older than the
