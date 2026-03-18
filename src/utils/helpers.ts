@@ -2,9 +2,9 @@ import {exec} from "child_process";
 import {promisify} from "util";
 import * as path from "path";
 import * as fs from "fs";
-import {App, FileSystemAdapter, TFile, Notice} from "obsidian";
+import {App, FileSystemAdapter, TFile, TAbstractFile, Notice} from "obsidian";
 
-export function getAbsolutePath(file: TFile): string {
+export function getAbsolutePath(file: TAbstractFile): string {
 	if (!file) return "";
 
 	const adapter = file.vault.adapter;
