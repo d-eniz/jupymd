@@ -1,13 +1,14 @@
-import { Plugin, TFile } from "obsidian";
-import { JupyMDSettingTab } from "./components/Settings";
-import { CodeExecutor } from "./components/CodeExecutor";
-import { FileSync } from "./components/FileSync";
-import { DEFAULT_SETTINGS, JupyMDPluginSettings } from "./components/types";
-import { registerCommands } from "./commands";
-import { createRoot } from "react-dom/client";
-import { PythonCodeBlock } from "./components/CodeBlock";
-import { getAbsolutePath } from "./utils/helpers";
-import { getDefaultPythonPath } from "./utils/pythonPathUtils";
+import {Plugin, TFile, TAbstractFile, MarkdownView} from "obsidian";
+import {JupyMDSettingTab} from "./components/Settings";
+import {CodeExecutor} from "./components/CodeExecutor";
+import {FileSync} from "./components/FileSync";
+import {DEFAULT_SETTINGS, JupyMDPluginSettings} from "./components/types";
+import {registerCommands} from "./commands";
+import {createRoot} from "react-dom/client";
+import {PythonCodeBlock} from "./components/CodeBlock";
+import {getAbsolutePath, isNotebookPaired} from "./utils/helpers";
+import {getDefaultPythonPath} from "./utils/pythonPathUtils";
+import * as fs from "fs";
 
 export default class JupyMDPlugin extends Plugin {
 	settings: JupyMDPluginSettings;
@@ -23,23 +24,67 @@ export default class JupyMDPlugin extends Plugin {
 			await this.saveSettings();
 		}
 
-		this.executor = new CodeExecutor(this, this.app);		
+		this.executor = new CodeExecutor(this, this.app);
 		this.fileSync = new FileSync(this.app, this.settings.pythonInterpreter, this.settings);
 
 		registerCommands(this);
 
 		this.addSettingTab(new JupyMDSettingTab(this.app, this));
 
-		this.registerEvent( // TODO: add option manually sync and disable auto sync
-			this.app.vault.on("modify", async (file: TFile) => {
-				if (this.settings.autoSync) {
+		this.registerEvent(
+			this.app.vault.on("modify", async (file: TAbstractFile) => {
+				if (file instanceof TFile && this.settings.autoSync) {
 					await this.fileSync.handleSync(file);
 				}
 			})
 		);
 
+		this.registerEvent(
+			this.app.vault.on("delete", async (file: TAbstractFile) => {
+				if (file instanceof TFile && file.extension === "md") {
+					try {
+						const mdPath = getAbsolutePath(file);
+						const ipynbPath = mdPath.replace(/\.md$/, ".ipynb");
+						if (fs.existsSync(ipynbPath)) {
+							fs.unlinkSync(ipynbPath);
+						}
+
+					} catch (e) {
+						console.error("Failed to delete paired notebook:", e);
+					}
+				}
+			})
+		);
+
+		this.registerEvent(
+			this.app.vault.on("rename", async (file: TAbstractFile, oldPath: string) => {
+				if (file instanceof TFile && file.extension === "md") {
+					try {
+						const newMdPath = getAbsolutePath(file);
+						const oldMdPath = newMdPath.substring(0, newMdPath.length - file.path.length) + oldPath;
+
+						const oldIpynbPath = oldMdPath.replace(/\.md$/, ".ipynb");
+						const newIpynbPath = newMdPath.replace(/\.md$/, ".ipynb");
+
+						if (fs.existsSync(oldIpynbPath)) {
+							fs.renameSync(oldIpynbPath, newIpynbPath);
+
+							this.app.workspace.getLeavesOfType("markdown").forEach((leaf) => {
+								const view = leaf.view;
+								if (view instanceof MarkdownView && view.file?.path === file.path) {
+									(leaf as any).rebuildView();
+								}
+							});
+						}
+					} catch (e) {
+						console.error("Failed to rename paired notebook:", e);
+					}
+				}
+			})
+		);
+
 		if (this.settings.enableCodeBlocks) {
-			await this.registerMarkdownCodeBlockProcessor(
+			this.registerMarkdownCodeBlockProcessor(
 				"python",
 				async (source, el, ctx) => {
 					el.empty();
@@ -49,7 +94,7 @@ export default class JupyMDPlugin extends Plugin {
 					const activeFile = this.app.vault.getFileByPath(ctx.sourcePath);
 
 					let index = 0;
-					if (activeFile) {
+					if (activeFile instanceof TFile) {
 						const filePath = getAbsolutePath(activeFile);
 						const fileContent = await this.app.vault.read(activeFile);
 						const lines = fileContent.split("\n");
@@ -97,7 +142,7 @@ export default class JupyMDPlugin extends Plugin {
 						}
 					} else {
 						createRoot(reactRoot).render(
-							<PythonCodeBlock code={source} />
+							<PythonCodeBlock code={source}/>
 						);
 					}
 				}

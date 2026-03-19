@@ -8,113 +8,127 @@ import * as path from "path";
 import {spawn, ChildProcess} from "child_process";
 
 export class CodeExecutor {
-    private currentNotePath: string | null = null;
-    private pythonProcess: ChildProcess | null = null;
-    private isProcessReady = false;
-    private executionQueue: Array<{
-        code: string;
-        resolve: (result: any) => void;
-        reject: (error: any) => void;
-    }> = [];
+	private currentNotePath: string | null = null;
+	private pythonProcess: ChildProcess | null = null;
+	private isProcessReady = false;
+	private executionQueue: Array<{
+		code: string;
+		resolve: (result: any) => void;
+		reject: (error: any) => void;
+	}> = [];
 
-    constructor(private plugin: JupyMDPlugin, private app: App) {
-    }
+	constructor(private plugin: JupyMDPlugin, private app: App) {
+	}
 
-    async executeCodeBlock(codeBlock: CodeBlock) {
-        const activeFile = this.app.workspace.getActiveFile();
-        if (!activeFile) return;
+	private getExecutionEnv(): NodeJS.ProcessEnv {
+		const env = {...process.env};
+		const pythonPath = this.plugin.settings.pythonInterpreter;
 
-        const currentPath = getAbsolutePath(activeFile);
-        if (
-            this.currentNotePath &&
-            this.currentNotePath !== currentPath
-        ) {
-            new Notice(
-                "Please restart the kernel before executing code in another note.\nUse the 'Restart Python kernel' command."
-            );
-            return;
-        }
+		if (pythonPath) {
+			const pythonDir = path.dirname(pythonPath);
+			env.PATH = `${pythonDir}${path.delimiter}${env.PATH || ""}`;
 
-        this.currentNotePath = currentPath;
+			if (pythonDir.endsWith("bin") || pythonDir.endsWith("Scripts")) {
+				env.VIRTUAL_ENV = path.dirname(pythonDir);
+			}
+		}
 
-        if (!activeFile) return;
+		return env;
+	}
 
-        const ipynbPath = currentPath.replace(/\.md$/, ".ipynb");
+	async executeCodeBlock(codeBlock: CodeBlock) {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile) return;
 
-        await this.runCodeAndUpdateNotebook({
-            codeBlock: codeBlock,
-            ipynbPath,
-        });
-    }
+		const currentPath = getAbsolutePath(activeFile);
+		if (
+			this.currentNotePath &&
+			this.currentNotePath !== currentPath
+		) {
+			await this.restartKernel()
+			await sleep(500)
+		}
 
-    async runCodeAndUpdateNotebook({codeBlock, ipynbPath}: {
-        codeBlock: CodeBlock;
-        ipynbPath: string;
-    }) {
-        try {
-            const result = await this.sendCodeToPython(codeBlock.code);
-            const {stdout, stderr, imageData} = result;
+		this.currentNotePath = currentPath;
 
-            const raw = await fs.readFile(ipynbPath, "utf-8");
-            const notebook = JSON.parse(raw);
+		if (!activeFile) return;
 
-            const cell = notebook.cells.filter((cell: {
-                cell_type: string
-            }) => cell.cell_type === "code")[codeBlock.cellIndex];
-            if (!cell) {
-                console.warn(`Cell with index ${codeBlock.cellIndex} not found.`);
-                return;
-            }
+		const ipynbPath = currentPath.replace(/\.md$/, ".ipynb");
 
-            const outputs: any[] = [];
+		await this.runCodeAndUpdateNotebook({
+			codeBlock: codeBlock,
+			ipynbPath,
+		});
+	}
 
-            if (stdout && stdout.trim()) {
-                outputs.push({
-                    output_type: "stream",
-                    name: "stdout",
-                    text: stdout.endsWith("\n") ? stdout : stdout + "\n",
-                });
-            }
+	async runCodeAndUpdateNotebook({codeBlock, ipynbPath}: {
+		codeBlock: CodeBlock;
+		ipynbPath: string;
+	}) {
+		try {
+			const result = await this.sendCodeToPython(codeBlock.code);
+			const {stdout, stderr, imageData} = result;
 
-            if (stderr && stderr.trim()) {
-                outputs.push({
-                    output_type: "stream",
-                    name: "stderr",
-                    text: stderr.endsWith("\n") ? stderr : stderr + "\n",
-                });
-            }
+			const raw = await fs.readFile(ipynbPath, "utf-8");
+			const notebook = JSON.parse(raw);
 
-            if (imageData && imageData.length > 0) {
-                outputs.push({
-                    output_type: "display_data",
-                    data: {
-                        "image/png": imageData,
-                    },
-                    metadata: {},
-                });
-            }
+			const cell = notebook.cells.filter((cell: {
+				cell_type: string
+			}) => cell.cell_type === "code")[codeBlock.cellIndex];
+			if (!cell) {
+				console.warn(`Cell with index ${codeBlock.cellIndex} not found.`);
+				return;
+			}
 
-            cell.outputs = outputs;
-            cell.execution_count = (cell.execution_count ?? 0) + 1;
+			const outputs: any[] = [];
 
-            if (!cell.metadata) cell.metadata = {};
-            cell.metadata.jupyter = {is_executing: false};
-            await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
+			if (stdout && stdout.trim()) {
+				outputs.push({
+					output_type: "stream",
+					name: "stdout",
+					text: stdout.endsWith("\n") ? stdout : stdout + "\n",
+				});
+			}
 
-            exec(`jupytext --sync "${ipynbPath}"`);
-        } catch (err) {
-            new Notice("Error updating notebook, check console for details")
-            console.error("Error updating notebook:", err);
-        }
-    }
+			if (stderr && stderr.trim()) {
+				outputs.push({
+					output_type: "stream",
+					name: "stderr",
+					text: stderr.endsWith("\n") ? stderr : stderr + "\n",
+				});
+			}
 
-    private async initializePythonProcess(): Promise<void> {
-        if (this.pythonProcess && !this.pythonProcess.killed) {
-            return;
-        }
+			if (imageData && imageData.length > 0) {
+				outputs.push({
+					output_type: "display_data",
+					data: {
+						"image/png": imageData,
+					},
+					metadata: {},
+				});
+			}
 
-        return new Promise((resolve, reject) => {
-            const initCode = `
+			cell.outputs = outputs;
+			cell.execution_count = (cell.execution_count ?? 0) + 1;
+
+			if (!cell.metadata) cell.metadata = {};
+			cell.metadata.jupyter = {is_executing: false};
+			await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
+
+			exec(`jupytext --sync "${ipynbPath}"`, {env: this.getExecutionEnv()});
+		} catch (err) {
+			new Notice("Error updating notebook, check console for details")
+			console.error("Error updating notebook:", err);
+		}
+	}
+
+	private async initializePythonProcess(): Promise<void> {
+		if (this.pythonProcess && !this.pythonProcess.killed) {
+			return;
+		}
+
+		return new Promise((resolve, reject) => {
+			const initCode = `
 import ast
 import sys
 import io
@@ -161,6 +175,9 @@ def execute_code(code_str):
         except Exception as e:
             _stderr.write(f"Compilation error: {str(e)}\\n")
             raise e
+        except SystemExit as e:
+            _stderr.write(f"SystemExit: {e.code}\\n")
+            raise e
 
         if not is_single_expression:
             try:
@@ -178,9 +195,13 @@ def execute_code(code_str):
                     
             except Exception as e:
                 _stderr.write("".join(traceback.format_exception(type(e), e, e.__traceback__)))
+            except SystemExit as e:
+                _stderr.write(f"SystemExit: {e.code}\\n")
             
     except Exception as e:
         _stderr.write("".join(traceback.format_exception(type(e), e, e.__traceback__)))
+    except SystemExit as e:
+        pass
     
     result = {
         "stdout": _stdout.getvalue(),
@@ -215,6 +236,16 @@ while True:
             execute_code(code_to_exec)
     except EOFError:
         break
+    except SystemExit as e:
+        error_result = {
+            "stdout": "",
+            "stderr": f"SystemExit: {e.code}",
+            "imageData": ""
+        }
+        print("###RESULT###")
+        print(json.dumps(error_result))
+        print("###END###")
+        sys.stdout.flush()
     except Exception as e:
         error_result = {
             "stdout": "",
@@ -227,137 +258,154 @@ while True:
         sys.stdout.flush()
 `;
 
-            const workingDir = this.currentNotePath 
-                ? path.dirname(this.currentNotePath)
-                : process.cwd();
+			const workingDir = this.currentNotePath
+				? path.dirname(this.currentNotePath)
+				: process.cwd();
 
 
-            this.pythonProcess = spawn(
-                this.plugin.settings.pythonInterpreter,
-                ["-c", initCode],
-                { 
-                    env: { ...process.env },
-                    cwd: workingDir
-                }
-            );
+			this.pythonProcess = spawn(
+				this.plugin.settings.pythonInterpreter,
+				["-c", initCode],
+				{
+					env: this.getExecutionEnv(),
+					cwd: workingDir
+				}
+			);
 
-            let initOutput = "";
+			let initOutput = "";
 
-            this.pythonProcess.stdout?.setEncoding("utf-8");
-            this.pythonProcess.stdout?.on("data", (data) => {
-                const output = data.toString();
-                initOutput += output;
+			this.pythonProcess.stdout?.setEncoding("utf-8");
+			this.pythonProcess.stdout?.on("data", (data) => {
+				const output = data.toString();
+				initOutput += output;
 
-                if (!this.isProcessReady && output.includes("PYTHON_READY")) {
-                    this.isProcessReady = true;
-                    resolve();
-                    return;
-                }
+				if (!this.isProcessReady && output.includes("PYTHON_READY")) {
+					this.isProcessReady = true;
+					resolve();
+					return;
+				}
 
-                if (this.executionQueue.length > 0 && output.includes("###END###")) {
-                    const currentExecution = this.executionQueue.shift();
-                    if (currentExecution) {
-                        try {
-                            const resultMatch = initOutput.match(/###RESULT###\s*(.*?)\s*###END###/s);
-                            if (resultMatch) {
-                                const result = JSON.parse(resultMatch[1]);
-                                currentExecution.resolve(result);
-                            } else {
-                                currentExecution.reject(new Error("Failed to parse execution result"));
-                            }
-                        } catch (e) {
-                            currentExecution.reject(e);
-                        }
-                    }
-                    initOutput = "";
-                }
-            });
+				if (this.executionQueue.length > 0 && output.includes("###END###")) {
+					const currentExecution = this.executionQueue.shift();
+					if (currentExecution) {
+						try {
+							const resultMatch = initOutput.match(/###RESULT###\s*(.*?)\s*###END###/s);
+							if (resultMatch) {
+								const result = JSON.parse(resultMatch[1]);
+								currentExecution.resolve(result);
+							} else {
+								currentExecution.reject(new Error("Failed to parse execution result"));
+							}
+						} catch (e) {
+							currentExecution.reject(e);
+						}
+					}
+					initOutput = "";
+				}
+			});
 
-            this.pythonProcess.stderr?.setEncoding("utf-8");
-            this.pythonProcess.stderr?.on("data", (data) => {
-                new Notice("Python process error, check console for details")
-                console.error("Python process stderr:", data.toString());
-            });
+			this.pythonProcess.stderr?.setEncoding("utf-8");
+			this.pythonProcess.stderr?.on("data", (data) => {
+				new Notice("Python process error, check console for details")
+				console.error("Python process stderr:", data.toString());
+			});
 
-            this.pythonProcess.on("close", (code) => {
-                console.log("Python process closed with code:", code);
-                this.pythonProcess = null;
-                this.isProcessReady = false;
-                while (this.executionQueue.length > 0) {
-                    const execution = this.executionQueue.shift();
-                    if (execution) {
-                        execution.reject(new Error("Python process closed unexpectedly"));
-                    }
-                }
-            });
+			this.pythonProcess.on("close", (code) => {
+				console.log("Python process closed with code:", code);
+				this.pythonProcess = null;
+				this.isProcessReady = false;
+				while (this.executionQueue.length > 0) {
+					const execution = this.executionQueue.shift();
+					if (execution) {
+						execution.reject(new Error("Python process closed unexpectedly"));
+					}
+				}
+			});
 
-            this.pythonProcess.on("error", (error) => {
-                new Notice("Python process error, check console for details")
-                console.error("Python process error:", error);
-                reject(error);
-            });
+			this.pythonProcess.on("error", (error) => {
+				new Notice("Python process error, check console for details")
+				console.error("Python process error:", error);
+				reject(error);
+			});
 
-            setTimeout(() => {
-                if (!this.isProcessReady) {
-                    reject(new Error("Python process initialization timeout"));
-                }
-            }, 10000);
-        });
-    }
+			setTimeout(() => {
+				if (!this.isProcessReady) {
+					reject(new Error("Python process initialization timeout"));
+				}
+			}, 10000);
+		});
+	}
 
-    async sendCodeToPython(code: string): Promise<{
-        stdout: string;
-        stderr: string;
-        imageData?: string;
-    }> {
-        await this.initializePythonProcess();
+	async sendCodeToPython(code: string): Promise<{
+		stdout: string;
+		stderr: string;
+		imageData?: string;
+	}> {
+		await this.initializePythonProcess();
 
-        return new Promise((resolve, reject) => {
-            this.executionQueue.push({code, resolve, reject});
+		return new Promise((resolve, reject) => {
+			this.executionQueue.push({code, resolve, reject});
 
-            if (!this.pythonProcess || !this.pythonProcess.stdin) {
-                reject(new Error("Python process not available"));
-                return;
-            }
+			if (!this.pythonProcess || !this.pythonProcess.stdin) {
+				reject(new Error("Python process not available"));
+				return;
+			}
 
-            if (code.includes('\n')) {
-                this.pythonProcess.stdin.write("EXEC:MULTILINE\n");
-                const lines = code.split('\n');
-                for (const line of lines) {
-                    this.pythonProcess.stdin.write(line + "\n");
-                }
-                this.pythonProcess.stdin.write("END_CODE\n");
-            } else {
-                this.pythonProcess.stdin.write(`EXEC:${code}\n`);
-            }
-        });
-    }
+			if (code.includes('\n')) {
+				this.pythonProcess.stdin.write("EXEC:MULTILINE\n");
+				const lines = code.split('\n');
+				for (const line of lines) {
+					this.pythonProcess.stdin.write(line + "\n");
+				}
+				this.pythonProcess.stdin.write("END_CODE\n");
+			} else {
+				this.pythonProcess.stdin.write(`EXEC:${code}\n`);
+			}
+		});
+	}
 
-    async restartKernel(): Promise<void> {
-        if (this.pythonProcess) {
-            this.pythonProcess.stdin?.write("EXIT\n");
-            this.pythonProcess.kill();
-            this.pythonProcess = null;
-        }
-        this.isProcessReady = false;
-        this.currentNotePath = null;
+	async restartKernel(): Promise<void> {
+		return new Promise((resolve, reject) => {
+			if (this.pythonProcess) {
+				this.pythonProcess.stdin?.write("EXIT\n");
 
-        while (this.executionQueue.length > 0) {
-            const execution = this.executionQueue.shift();
-            if (execution) {
-                execution.reject(new Error("Kernel restarted"));
-            }
-        }
+				// wait until it actually exits
+				this.pythonProcess.once('exit', (code, signal) => {
+					this.pythonProcess = null;
+					this.isProcessReady = false;
+					this.currentNotePath = null;
 
-        new Notice("Python kernel restarted");
-    }
+					while (this.executionQueue.length > 0) {
+						const execution = this.executionQueue.shift();
+						if (execution) {
+							execution.reject(new Error("Kernel restarted"));
+						}
+					}
 
-    cleanup(): void {
-        if (this.pythonProcess) {
-            this.pythonProcess.stdin?.write("EXIT\n");
-            this.pythonProcess.kill();
-            this.pythonProcess = null;
-        }
-        this.isProcessReady = false;
-    }
+					new Notice("Python kernel restarted");
+					resolve();
+				});
+
+				this.pythonProcess.once('error', (err) => {
+					reject(err);
+				});
+
+				this.pythonProcess.kill();
+			} else {
+				this.isProcessReady = false;
+				this.currentNotePath = null;
+				new Notice("Python kernel restarted");
+				resolve();
+			}
+		});
+	}
+
+	cleanup(): void {
+		if (this.pythonProcess) {
+			this.pythonProcess.stdin?.write("EXIT\n");
+			this.pythonProcess.kill();
+			this.pythonProcess = null;
+		}
+		this.isProcessReady = false;
+	}
 }

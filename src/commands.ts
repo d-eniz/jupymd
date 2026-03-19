@@ -23,12 +23,6 @@ export function registerCommands(plugin: JupyMDPlugin) {
 	});
 
 	plugin.addCommand({
-		id: "restart-python-kernel",
-		name: "Restart Python kernel",
-		callback: () => executor.restartKernel(),
-	});
-
-	plugin.addCommand({
 		id: "force-sync",
 		name: "Sync files",
 		callback: () => fileSync.handleSync(undefined, true),
