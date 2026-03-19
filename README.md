@@ -53,7 +53,18 @@ With JupyMD you can:
 
 Download the plugin through the [Obsidian community plugin browser](obsidian://show-plugin?id=jupymd) and enable it.
 
-### Setup
+### Quick Setup
+The easiest way to setup everything is by clicking the "Run Quick Setup" button on the settings page. This will create a virtual environment called `.jupymd` on your vault root, configure it as the interpreter, and install all necessary dependencies.
+
+To install any additional dependencies, run the following on a terminal:
+
+```bash
+<path_to_interpreter> -m pip install <library>
+```
+
+### Manual setup
+You can use any existing interpreter by pointing to its location.
+
 The default settings assume Python is in your system's `PATH`. It is highly recommended to set the interpreter to a [virtual environment](https://docs.python.org/3/library/venv.html) instead.
 
 In a directory where you want your virtual environment to be stored in:
