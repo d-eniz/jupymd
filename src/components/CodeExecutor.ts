@@ -30,6 +30,7 @@ export class CodeExecutor {
 			this.currentNotePath !== currentPath
 		) {
 			await this.restartKernel()
+			await sleep(500)
 		}
 
 		this.currentNotePath = currentPath;
