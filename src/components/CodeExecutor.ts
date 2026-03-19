@@ -20,6 +20,22 @@ export class CodeExecutor {
 	constructor(private plugin: JupyMDPlugin, private app: App) {
 	}
 
+	private getExecutionEnv(): NodeJS.ProcessEnv {
+		const env = {...process.env};
+		const pythonPath = this.plugin.settings.pythonInterpreter;
+
+		if (pythonPath) {
+			const pythonDir = path.dirname(pythonPath);
+			env.PATH = `${pythonDir}${path.delimiter}${env.PATH || ""}`;
+
+			if (pythonDir.endsWith("bin") || pythonDir.endsWith("Scripts")) {
+				env.VIRTUAL_ENV = path.dirname(pythonDir);
+			}
+		}
+
+		return env;
+	}
+
 	async executeCodeBlock(codeBlock: CodeBlock) {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) return;
@@ -99,7 +115,7 @@ export class CodeExecutor {
 			cell.metadata.jupyter = {is_executing: false};
 			await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
 
-			exec(`jupytext --sync "${ipynbPath}"`);
+			exec(`jupytext --sync "${ipynbPath}"`, {env: this.getExecutionEnv()});
 		} catch (err) {
 			new Notice("Error updating notebook, check console for details")
 			console.error("Error updating notebook:", err);
@@ -251,7 +267,7 @@ while True:
 				this.plugin.settings.pythonInterpreter,
 				["-c", initCode],
 				{
-					env: {...process.env},
+					env: this.getExecutionEnv(),
 					cwd: workingDir
 				}
 			);
