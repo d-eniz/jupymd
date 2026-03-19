@@ -159,6 +159,9 @@ def execute_code(code_str):
         except Exception as e:
             _stderr.write(f"Compilation error: {str(e)}\\n")
             raise e
+        except SystemExit as e:
+            _stderr.write(f"SystemExit: {e.code}\\n")
+            raise e
 
         if not is_single_expression:
             try:
@@ -176,9 +179,13 @@ def execute_code(code_str):
                     
             except Exception as e:
                 _stderr.write("".join(traceback.format_exception(type(e), e, e.__traceback__)))
+            except SystemExit as e:
+                _stderr.write(f"SystemExit: {e.code}\\n")
             
     except Exception as e:
         _stderr.write("".join(traceback.format_exception(type(e), e, e.__traceback__)))
+    except SystemExit as e:
+        pass
     
     result = {
         "stdout": _stdout.getvalue(),
@@ -213,6 +220,16 @@ while True:
             execute_code(code_to_exec)
     except EOFError:
         break
+    except SystemExit as e:
+        error_result = {
+            "stdout": "",
+            "stderr": f"SystemExit: {e.code}",
+            "imageData": ""
+        }
+        print("###RESULT###")
+        print(json.dumps(error_result))
+        print("###END###")
+        sys.stdout.flush()
     except Exception as e:
         error_result = {
             "stdout": "",
