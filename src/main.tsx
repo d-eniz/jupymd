@@ -1,4 +1,4 @@
-import {Plugin, TFile, TAbstractFile} from "obsidian";
+import {Plugin, TFile, TAbstractFile, MarkdownView} from "obsidian";
 import {JupyMDSettingTab} from "./components/Settings";
 import {CodeExecutor} from "./components/CodeExecutor";
 import {FileSync} from "./components/FileSync";
@@ -68,6 +68,13 @@ export default class JupyMDPlugin extends Plugin {
 
 						if (fs.existsSync(oldIpynbPath)) {
 							fs.renameSync(oldIpynbPath, newIpynbPath);
+
+							this.app.workspace.getLeavesOfType("markdown").forEach((leaf) => {
+								const view = leaf.view;
+								if (view instanceof MarkdownView && view.file?.path === file.path) {
+									(leaf as any).rebuildView();
+								}
+							});
 						}
 					} catch (e) {
 						console.error("Failed to rename paired notebook:", e);
