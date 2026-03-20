@@ -19,11 +19,9 @@ export class JupyMDSettingTab extends PluginSettingTab {
 		const {containerEl} = this;
 		containerEl.empty();
 
-		containerEl.createEl("h4", {text: "Setup"});
-
 		new Setting(containerEl)
 			.setName("Quick Setup")
-			.setDesc("Automatically create a virtual environment (.jupymd) in your vault root and install the required libraries (jupytext, jupyter, matplotlib).")
+			.setDesc("Automatically create a virtual environment (.jupymd) in your vault root and install the required libraries. Requires restart to take effect.")
 			.addButton((btn) => {
 				btn.setButtonText("Run Quick Setup")
 					.setCta()
@@ -42,9 +40,17 @@ export class JupyMDSettingTab extends PluginSettingTab {
 					});
 			});
 
+		const desc = document.createDocumentFragment();
+		desc.appendText("Select the Python interpreter. Requires restart to take effect.");
+		desc.createEl("br");
+		const link = desc.createEl("a", {
+			text: "Read manual setup guide.",
+			href: "https://github.com/d-eniz/jupymd/blob/master/README.md#manual-setup",
+		});
+
 		new Setting(containerEl)
 			.setName("Python interpreter")
-			.setDesc("Select the Python interpreter. Requires restart to take effect.")
+			.setDesc(desc)
 			.addText((text) => {
 				text.setValue(this.plugin.settings.pythonInterpreter)
 				text.setPlaceholder("python3")
@@ -66,7 +72,7 @@ export class JupyMDSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Install required libraries")
-			.setDesc("Attempt to install Jupytext and matplotlib for specified interpreter using pip.")
+			.setDesc("Install Jupytext and matplotlib for specified interpreter using pip.")
 			.addButton((btn) =>
 				btn
 					.setButtonText("Install")
@@ -78,12 +84,11 @@ export class JupyMDSettingTab extends PluginSettingTab {
 					})
 			);
 
-		containerEl.createEl('hr');
 		containerEl.createEl("h4", {text: "General"});
 
 		new Setting(containerEl)
 			.setName("Jupyter notebook editor launch command")
-			.setDesc("Specify the command to launch Jupyter notebooks in your preferred editor (e.g., 'code' for VS Code, 'jupyter-lab' for Jupyter Lab, 'pycharm64.exe' for PyCharm, etc.)")
+			.setDesc("Specify the command to launch Jupyter notebooks in your preferred editor (e.g., 'code' for VS Code, 'jupyter-lab' for Jupyter Lab, etc.)")
 			.addText((text) => {
 				text.setValue(this.plugin.settings.notebookEditorCommand)
 					.onChange(async (value) => {
