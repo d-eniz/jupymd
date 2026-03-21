@@ -1,7 +1,7 @@
 {
 	"name": "jupymd",
 	"version": "1.5.1",
-	"description": "Link and sync Markdown notes with Jupyter notebooks via Jupytext.",
+	"description": "Use Jupyter notebooks in Obsidian.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
