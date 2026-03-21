@@ -1,6 +1,6 @@
 import {App, Notice, TFile, MarkdownView} from "obsidian";
 import {exec, execFile} from "child_process";
-import {getAbsolutePath, isNotebookPaired} from "../utils/helpers";
+import {getAbsolutePath, isNotebookPaired, runJupytext} from "../utils/helpers";
 import {JupyMDPluginSettings} from "./types";
 import * as fs from "fs";
 
@@ -16,23 +16,6 @@ export class FileSync {
 	constructor(private app: App, pythonPath: string, settings: JupyMDPluginSettings) {
 		this.pythonPath = pythonPath;
 		this.settings = settings;
-	}
-
-	private runJupytext(args: string[]): Promise<void> {
-		return new Promise((resolve, reject) => {
-			execFile(
-				this.pythonPath,
-				["-m", "jupytext", ...args],
-				(error, stdout, stderr) => {
-					if (error) {
-						console.error(stderr || error.message);
-						reject(error);
-						return;
-					}
-					resolve();
-				}
-			);
-		});
 	}
 
 	public isSyncBlocked(): boolean {
@@ -141,8 +124,8 @@ export class FileSync {
 		const mdPath = absPath.replace(/\.ipynb$/, ".md");
 
 		try {
-			await this.runJupytext(["--to", "markdown", absPath]);
-			await this.runJupytext(["--set-formats", "ipynb,md", absPath]);
+			await runJupytext(this.pythonPath, ["--to", "markdown", absPath]);
+			await runJupytext(this.pythonPath, ["--set-formats", "ipynb,md", absPath]);
 
 			new Notice(`Note created and paired: ${mdPath}`);
 
@@ -178,7 +161,7 @@ export class FileSync {
 				fs.unlinkSync(ipynbPath)
 			}
 
-			await this.runJupytext(["--to", "notebook", mdPath]);
+			await runJupytext(this.pythonPath, ["--to", "notebook", mdPath]);
 
 			const metadata = JSON.stringify({
 				kernelspec: {
@@ -188,7 +171,7 @@ export class FileSync {
 				},
 			});
 
-			await this.runJupytext([
+			await runJupytext(this.pythonPath, [
 				ipynbPath,
 				"--set-formats", "ipynb,md",
 				"--update-metadata", metadata,
@@ -243,9 +226,9 @@ export class FileSync {
 
 		try {
 			if (this.settings.bidirectionalSync) {
-				await this.runJupytext(["--sync", ipynbPath]);
+				await runJupytext(this.pythonPath, ["--sync", ipynbPath]);
 			} else {
-				await this.runJupytext(["--to", "ipynb", filePath]);
+				await runJupytext(this.pythonPath, ["--to", "ipynb", filePath]);
 			}
 		} catch (error: any) {
 			console.error(`Failed to sync Markdown file: ${error.message}`);

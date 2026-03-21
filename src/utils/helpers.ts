@@ -1,4 +1,4 @@
-import {exec} from "child_process";
+import {exec, execFile} from "child_process";
 import {promisify} from "util";
 import * as path from "path";
 import * as fs from "fs";
@@ -15,6 +15,23 @@ export function getAbsolutePath(file: TAbstractFile): string {
 		throw new Error("Cannot get base path: unsupported adapter type.");
 	}
 }
+
+export async function runJupytext(pythonPath: string, args: string[]): Promise<void> {
+		return new Promise((resolve, reject) => {
+			execFile(
+				pythonPath,
+				["-m", "jupytext", ...args],
+				(error, stdout, stderr) => {
+					if (error) {
+						console.error(stderr || error.message);
+						reject(error);
+						return;
+					}
+					resolve();
+				}
+			);
+		});
+	}
 
 export async function isNotebookPaired(app: App, file: TFile): Promise<boolean> {
 	if (!file) return false;
