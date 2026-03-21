@@ -12,7 +12,7 @@ export class JupyMDSettingTab extends PluginSettingTab {
 	constructor(app: App, plugin: JupyMDPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
-		this.executor = new CodeExecutor(this.plugin, this.app);
+		this.executor = new CodeExecutor(this.plugin, this.plugin.settings.pythonInterpreter, this.app);
 	}
 
 	display(): void {
@@ -20,10 +20,10 @@ export class JupyMDSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName("Quick Setup")
+			.setName("Quick setup")
 			.setDesc("Automatically create a virtual environment (.jupymd) in your vault root and install the required libraries. Requires restart to take effect.")
 			.addButton((btn) => {
-				btn.setButtonText("Run Quick Setup")
+				btn.setButtonText("Run")
 					.setCta()
 					.onClick(async () => {
 						btn.setDisabled(true);
@@ -43,7 +43,7 @@ export class JupyMDSettingTab extends PluginSettingTab {
 		const desc = document.createDocumentFragment();
 		desc.appendText("Select the Python interpreter. Requires restart to take effect.");
 		desc.createEl("br");
-		const link = desc.createEl("a", {
+		desc.createEl("a", {
 			text: "Read manual setup guide.",
 			href: "https://github.com/d-eniz/jupymd/blob/master/README.md#manual-setup",
 		});
