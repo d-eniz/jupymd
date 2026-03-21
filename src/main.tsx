@@ -24,7 +24,7 @@ export default class JupyMDPlugin extends Plugin {
 			await this.saveSettings();
 		}
 
-		this.executor = new CodeExecutor(this, this.app);
+		this.executor = new CodeExecutor(this, this.settings.pythonInterpreter, this.app);
 		this.fileSync = new FileSync(this.app, this.settings.pythonInterpreter, this.settings);
 
 		registerCommands(this);

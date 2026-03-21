@@ -1,7 +1,6 @@
 import JupyMDPlugin from "../main";
 import {App, Notice} from "obsidian";
-import {exec} from "child_process";
-import {getAbsolutePath} from "../utils/helpers";
+import {getAbsolutePath, runJupytext} from "../utils/helpers";
 import {CodeBlock} from "./types";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -9,6 +8,7 @@ import {spawn, ChildProcess} from "child_process";
 
 export class CodeExecutor {
 	private currentNotePath: string | null = null;
+	private readonly pythonPath: string;
 	private pythonProcess: ChildProcess | null = null;
 	private isProcessReady = false;
 	private executionQueue: Array<{
@@ -17,7 +17,8 @@ export class CodeExecutor {
 		reject: (error: any) => void;
 	}> = [];
 
-	constructor(private plugin: JupyMDPlugin, private app: App) {
+	constructor(private plugin: JupyMDPlugin, pythonPath: string, private app: App) {
+		this.pythonPath = pythonPath
 	}
 
 	private getExecutionEnv(): NodeJS.ProcessEnv {
@@ -115,7 +116,8 @@ export class CodeExecutor {
 			cell.metadata.jupyter = {is_executing: false};
 			await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
 
-			exec(`jupytext --sync "${ipynbPath}"`, {env: this.getExecutionEnv()});
+			await runJupytext(this.pythonPath, ["--sync", ipynbPath]);
+
 		} catch (err) {
 			new Notice("Error updating notebook, check console for details")
 			console.error("Error updating notebook:", err);
@@ -263,7 +265,7 @@ while True:
 				: process.cwd();
 
 
-			this.pythonProcess = spawn(
+			const pythonProcess = spawn(
 				this.plugin.settings.pythonInterpreter,
 				["-c", initCode],
 				{
@@ -272,20 +274,23 @@ while True:
 				}
 			);
 
+			this.pythonProcess = pythonProcess;
+
 			let initOutput = "";
 
-			this.pythonProcess.stdout?.setEncoding("utf-8");
-			this.pythonProcess.stdout?.on("data", (data) => {
+			pythonProcess.stdout?.setEncoding("utf-8");
+			pythonProcess.stdout?.on("data", (data) => {
 				const output = data.toString();
 				initOutput += output;
 
-				if (!this.isProcessReady && output.includes("PYTHON_READY")) {
+				if (!this.isProcessReady && initOutput.includes("PYTHON_READY")) {
 					this.isProcessReady = true;
+					initOutput = initOutput.slice(initOutput.indexOf("PYTHON_READY") + "PYTHON_READY".length).trimStart();
 					resolve();
 					return;
 				}
 
-				if (this.executionQueue.length > 0 && output.includes("###END###")) {
+				while (this.executionQueue.length > 0 && initOutput.includes("###END###")) {
 					const currentExecution = this.executionQueue.shift();
 					if (currentExecution) {
 						try {
@@ -293,36 +298,41 @@ while True:
 							if (resultMatch) {
 								const result = JSON.parse(resultMatch[1]);
 								currentExecution.resolve(result);
+								initOutput = initOutput.slice(resultMatch.index! + resultMatch[0].length);
 							} else {
 								currentExecution.reject(new Error("Failed to parse execution result"));
+								initOutput = "";
 							}
 						} catch (e) {
 							currentExecution.reject(e);
+							initOutput = "";
 						}
 					}
-					initOutput = "";
 				}
 			});
 
-			this.pythonProcess.stderr?.setEncoding("utf-8");
-			this.pythonProcess.stderr?.on("data", (data) => {
+			pythonProcess.stderr?.setEncoding("utf-8");
+			pythonProcess.stderr?.on("data", (data) => {
 				new Notice("Python process error, check console for details")
 				console.error("Python process stderr:", data.toString());
 			});
 
-			this.pythonProcess.on("close", (code) => {
+			pythonProcess.on("close", (code) => {
 				console.log("Python process closed with code:", code);
-				this.pythonProcess = null;
-				this.isProcessReady = false;
+				if (this.pythonProcess === pythonProcess) {
+					this.pythonProcess = null;
+					this.isProcessReady = false;
+				}
 				while (this.executionQueue.length > 0) {
 					const execution = this.executionQueue.shift();
 					if (execution) {
 						execution.reject(new Error("Python process closed unexpectedly"));
 					}
 				}
+				reject(new Error(`Python process closed with code: ${code}`));
 			});
 
-			this.pythonProcess.on("error", (error) => {
+			pythonProcess.on("error", (error) => {
 				new Notice("Python process error, check console for details")
 				console.error("Python process error:", error);
 				reject(error);
@@ -367,13 +377,16 @@ while True:
 	async restartKernel(): Promise<void> {
 		return new Promise((resolve, reject) => {
 			if (this.pythonProcess) {
-				this.pythonProcess.stdin?.write("EXIT\n");
+				const processToKill = this.pythonProcess;
+				processToKill.stdin?.write("EXIT\n");
 
 				// wait until it actually exits
-				this.pythonProcess.once('exit', (code, signal) => {
-					this.pythonProcess = null;
-					this.isProcessReady = false;
-					this.currentNotePath = null;
+				processToKill.once('exit', (code, signal) => {
+					if (this.pythonProcess === processToKill) {
+						this.pythonProcess = null;
+						this.isProcessReady = false;
+						this.currentNotePath = null;
+					}
 
 					while (this.executionQueue.length > 0) {
 						const execution = this.executionQueue.shift();
@@ -386,11 +399,11 @@ while True:
 					resolve();
 				});
 
-				this.pythonProcess.once('error', (err) => {
+				processToKill.once('error', (err) => {
 					reject(err);
 				});
 
-				this.pythonProcess.kill();
+				processToKill.kill();
 			} else {
 				this.isProcessReady = false;
 				this.currentNotePath = null;
