@@ -129,5 +129,16 @@ export class JupyMDSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				})
 			})
+
+		new Setting(containerEl)
+			.setName("Automatically convert notes to notebooks on run")
+			.setDesc("When enabled, running code from an unpaired note will first create and pair a Jupyter notebook, then execute the requested code.")
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.autoConvertToNotebookOnRun)
+				toggle.onChange(async (value) => {
+					this.plugin.settings.autoConvertToNotebookOnRun = value;
+					await this.plugin.saveSettings();
+				})
+			})
 	}
 }
