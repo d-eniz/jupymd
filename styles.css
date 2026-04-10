@@ -3,7 +3,7 @@
 }
 
 .code-container {
-	border-radius: 6px;
+	border-radius: var(--code-radius);
 	overflow: hidden;
 	background-color: var(--background-primary);
 	border: 1px solid var(--background-modifier-border-hover);
@@ -19,7 +19,24 @@
 
 .code-buttons {
 	display: flex;
+	align-items: center;
 	gap: 0.5em;
+}
+
+.run-action-group {
+	position: relative;
+	display: flex;
+	align-items: stretch;
+	background-color: transparent;
+	border: none;
+	border-radius: 5px;
+	overflow: visible;
+}
+
+.run-action-group:hover,
+.run-action-group:focus-within,
+.run-action-group-open {
+	background-color: var(--background-secondary);
 }
 
 .code-lang-label {
@@ -49,15 +66,92 @@
 	border: none !important;
 	outline: none !important;
 	background-color: transparent !important;
+	width: 24px;
+	height: 24px;
 	padding: 0 !important;
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	border-radius: 5px;
+	cursor: pointer;
+}
+
+.split-run-button {
+	box-shadow: none !important;
+	border: none !important;
+	outline: none !important;
+	background-color: transparent !important;
+	padding: 0 !important;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 22px;
+	cursor: pointer;
+}
+
+.split-run-button-main {
+	width: 24px;
+	padding: 0 0.1em !important;
+	border-radius: 5px 0 0 5px;
+}
+
+.split-run-button-toggle {
+	width: 16px;
+	border-radius: 0 5px 5px 0;
+	padding-left: 0 !important;
+}
+
+.run-dropdown-menu {
+	position: fixed;
+	min-width: 0;
+	padding: 0.18em;
+	display: flex;
+	align-items: center;
+	gap: 0.12em;
+	background-color: var(--background-primary);
+	border-radius: 8px;
+	box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+	z-index: 999;
+}
+
+.run-dropdown-item {
+	box-shadow: none !important;
+	border: none !important;
+	outline: none !important;
+	background-color: transparent !important;
+	width: 24px;
+	height: 24px;
+	padding: 0 !important;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 5px;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.icon-button:disabled,
+.split-run-button:disabled,
+.run-dropdown-item:disabled {
+	opacity: 0.5;
+	cursor: default !important;
+}
+
+.split-run-button:hover:not(:disabled),
+.icon-button:hover:not(:disabled),
+.run-dropdown-item:hover:not(:disabled) {
+	background-color: var(--background-modifier-hover) !important;
 }
 
 .icon {
 	width: 15px;
 	height: 15px;
+	flex-shrink: 0;
+}
+
+.chevron-icon {
+	width: 10px;
+	height: 10px;
 }
 
 .grey-icon {
@@ -68,6 +162,24 @@
 .grey-icon:hover {
 	cursor: pointer;
 	transition: color 0.2s;
+	color: var(--text-normal);
+}
+
+.icon-button:disabled .grey-icon,
+.icon-button:disabled .grey-icon:hover,
+.split-run-button:disabled .grey-icon,
+.split-run-button:disabled .grey-icon:hover,
+.run-dropdown-item:disabled .grey-icon,
+.run-dropdown-item:disabled .grey-icon:hover {
+	color: var(--text-muted);
+	cursor: default;
+	pointer-events: none;
+}
+
+.split-run-button:hover:not(:disabled) .grey-icon,
+.icon-button:hover:not(:disabled) .grey-icon,
+.run-dropdown-item:hover:not(:disabled) .grey-icon,
+.run-dropdown-item:hover:not(:disabled) {
 	color: var(--text-normal);
 }
 
