@@ -1,7 +1,7 @@
-const RunIcon = ({
+const ChevronDownIcon = ({
 	size = 24,
 	color = "currentColor",
-	strokeWidth = 0.2,
+	strokeWidth = 0.8,
 	background = "transparent",
 	opacity = 1,
 	rotation = 0,
@@ -16,12 +16,12 @@ const RunIcon = ({
 	if (flipHorizontal) transforms.push("scaleX(-1)");
 	if (flipVertical) transforms.push("scaleY(-1)");
 
-	const viewBoxSize = 16 + padding * 2;
+	const viewBoxSize = 16 + padding * 2; // 👈 correct scale
 	const viewBoxOffset = -padding;
 	const viewBox = `${viewBoxOffset} ${viewBoxOffset} ${viewBoxSize} ${viewBoxSize}`;
 
 	const d =
-		"M4.745 3.064A.5.5 0 0 0 4 3.5v9a.5.5 0 0 0 .745.436l8-4.5a.5.5 0 0 0 0-.872zM3 3.5a1.5 1.5 0 0 1 2.235-1.307l8 4.5a1.5 1.5 0 0 1 0 2.615l-8 4.5A1.5 1.5 0 0 1 3 12.5z";
+		"M3.146 5.646a.5.5 0 0 1 .708 0L8 9.793l4.146-4.147a.5.5 0 0 1 .708.708l-4.5 4.5a.5.5 0 0 1-.708 0l-4.5-4.5a.5.5 0 0 1 0-.708";
 
 	return (
 		<svg
@@ -41,7 +41,10 @@ const RunIcon = ({
 					background !== "transparent" ? background : undefined,
 			}}
 		>
+			{/* Fill */}
 			<path d={d} fill={color} />
+
+			{/* Optional stroke (thickness control) */}
 			{strokeWidth > 0 && (
 				<path
 					d={d}
@@ -49,10 +52,11 @@ const RunIcon = ({
 					stroke={color}
 					strokeWidth={strokeWidth}
 					strokeLinejoin="round"
+					strokeLinecap="round"
 				/>
 			)}
 		</svg>
 	);
 };
 
-export default RunIcon;
+export default ChevronDownIcon;

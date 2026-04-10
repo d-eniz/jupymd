@@ -1,4 +1,4 @@
-const RunIcon = ({
+const RunBelowIcon = ({
 	size = 24,
 	color = "currentColor",
 	strokeWidth = 0.2,
@@ -20,8 +20,7 @@ const RunIcon = ({
 	const viewBoxOffset = -padding;
 	const viewBox = `${viewBoxOffset} ${viewBoxOffset} ${viewBoxSize} ${viewBoxSize}`;
 
-	const d =
-		"M4.745 3.064A.5.5 0 0 0 4 3.5v9a.5.5 0 0 0 .745.436l8-4.5a.5.5 0 0 0 0-.872zM3 3.5a1.5 1.5 0 0 1 2.235-1.307l8 4.5a1.5 1.5 0 0 1 0 2.615l-8 4.5A1.5 1.5 0 0 1 3 12.5z";
+	const d = "M16 13.5a.48.48 0 0 1-.15.35l-2 2a.5.5 0 0 1-.349.15a.48.48 0 0 1-.35-.15l-2-2a.484.484 0 0 1 0-.7a.484.484 0 0 1 .699 0L13 14.29V9.5a.5.5 0 1 1 1 0v4.79l1.15-1.14a.484.484 0 0 1 .699 0a.48.48 0 0 1 .15.35zm-4-4.645l-7.255 4.081A.5.5 0 0 1 4 12.5v-9a.5.5 0 0 1 .745-.436l8 4.5c.17.096.255.266.255.436h1c0-.51-.255-1.021-.765-1.307l-8-4.5A1.5 1.5 0 0 0 3 3.5v9a1.5 1.5 0 0 0 2.235 1.307L12 10.002z";
 
 	return (
 		<svg
@@ -55,4 +54,4 @@ const RunIcon = ({
 	);
 };
 
-export default RunIcon;
+export default RunBelowIcon;

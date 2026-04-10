@@ -27,4 +27,16 @@ export function registerCommands(plugin: JupyMDPlugin) {
 		name: "Sync files",
 		callback: () => fileSync.handleSync(undefined, true),
 	});
+
+	plugin.addCommand({
+		id: "run-all-code-blocks",
+		name: "Run all code blocks in current note",
+		callback: async () => executor.executeAllCodeBlocksInCurrentFile(),
+	});
+
+	plugin.addCommand({
+		id: "clear-all-code-block-outputs",
+		name: "Clear all code block outputs in current note",
+		callback: async () => executor.clearAllOutputsInCurrentFile(),
+	});
 }
