@@ -1,46 +1,98 @@
 name: Release Obsidian plugin
 
 on:
-    push:
-        tags:
-            - "*"
-    workflow_dispatch:
-        inputs:
-            tag:
-                description: "Tag version (e.g., 1.2.3)"
-                required: true
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: Select the semantic version bump for this release.
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 jobs:
-    build:
-        runs-on: ubuntu-latest
-        permissions:
-            contents: write
-        steps:
-            - uses: actions/checkout@v3
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
-            - name: Use Node.js
-              uses: actions/setup-node@v3
-              with:
-                  node-version: "18.x"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
 
-            - name: Build plugin
-              run: |
-                  npm install
-                  npm run build
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18.x"
+          cache: npm
 
-            - name: Create release
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: |
-                  if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-                  tag="${{ github.event.inputs.tag }}"
-                  else
-                  tag="${GITHUB_REF#refs/tags/}"
-                  fi
+      - name: Install dependencies
+        run: npm ci
 
-                  echo "Creating release for tag: $tag"
+      - name: Bump release version
+        id: version
+        run: |
+          npm version "${{ github.event.inputs.release_type }}" --no-git-tag-version
+          version="$(node -p "require('./package.json').version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
-                  gh release create "$tag" \
-                  --title="$tag" \
-                  --draft \
-                  main.js manifest.json styles.css
+      - name: Generate conventional release notes
+        id: changelog
+        uses: TriPSs/conventional-changelog-action@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          preset: conventionalcommits
+          tag-prefix: ""
+          output-file: "false"
+          git-push: "false"
+          skip-git-pull: "true"
+          skip-version-file: "true"
+          skip-commit: "true"
+          skip-tag: "true"
+          skip-bump: "true"
+          skip-on-empty: "false"
+          create-summary: "true"
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Commit and tag release
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json manifest.json versions.json
+          git commit -m "chore(release): ${VERSION}"
+          git tag "${VERSION}"
+          git push origin "${GITHUB_REF_NAME}"
+          git push origin "${VERSION}"
+
+      - name: Prepare release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          CHANGELOG: ${{ steps.changelog.outputs.clean_changelog }}
+          SKIPPED: ${{ steps.changelog.outputs.skipped }}
+        run: |
+          if [ "$SKIPPED" = "true" ] || [ -z "$CHANGELOG" ]; then
+            printf 'Release %s\n' "$VERSION" > RELEASE_NOTES.md
+          else
+            printf '%s\n' "$CHANGELOG" > RELEASE_NOTES.md
+          fi
+
+      - name: Create draft GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "$VERSION" \
+            --title "$VERSION" \
+            --draft \
+            --notes-file RELEASE_NOTES.md \
+            main.js manifest.json styles.css
