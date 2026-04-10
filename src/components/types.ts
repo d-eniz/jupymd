@@ -19,6 +19,8 @@ export type CodeBlock = {
 	cellIndex: number;
 }
 
+export type CodeExecutionMode = "cell" | "above" | "cell-and-below";
+
 export type PythonBlockProps = {
 	code?: string;
 	path?: string;
