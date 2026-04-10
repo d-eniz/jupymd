@@ -1,7 +1,7 @@
 import JupyMDPlugin from "../main";
-import {App, Notice} from "obsidian";
-import {getAbsolutePath, runJupytext} from "../utils/helpers";
-import {CodeBlock, CodeExecutionMode} from "./types";
+import {App, Notice, TFile} from "obsidian";
+import {getAbsolutePath, isNotebookPaired, runJupytext} from "../utils/helpers";
+import {CodeBlock, CodeExecutionMode, OUTPUTS_UPDATED_EVENT} from "./types";
 import * as fs from "fs/promises";
 import * as path from "path";
 import {spawn, ChildProcess} from "child_process";
@@ -21,23 +21,108 @@ export class CodeExecutor {
 		this.pythonPath = pythonPath
 	}
 
-	private async prepareExecutionContext(): Promise<{ ipynbPath: string } | null> {
+	private notifyOutputsUpdated(notePath: string) {
+		if (typeof document === "undefined") {
+			return;
+		}
+
+		document.dispatchEvent(new CustomEvent(OUTPUTS_UPDATED_EVENT, {
+			detail: {path: notePath},
+		}));
+	}
+
+	private async getActivePairedNotebookContext(): Promise<{
+		activeFile: TFile;
+		notePath: string;
+		ipynbPath: string;
+	} | null> {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile) {
+			new Notice("No active note to run.");
+			return null;
+		}
+
+		if (activeFile.extension !== "md") {
+			new Notice("Active file is not a markdown note.");
+			return null;
+		}
+
+		if (!await isNotebookPaired(this.app, activeFile)) {
+			new Notice("Active note is not paired with a notebook.");
+			return null;
+		}
+
+		const notePath = getAbsolutePath(activeFile);
+
+		return {
+			activeFile,
+			notePath,
+			ipynbPath: notePath.replace(/\.md$/, ".ipynb"),
+		};
+	}
+
+	private async getActiveNotebookContextForRun(): Promise<{
+		activeFile: TFile;
+		notePath: string;
+		ipynbPath: string;
+	} | null> {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile) {
+			new Notice("No active note to run.");
+			return null;
+		}
+
+		if (activeFile.extension !== "md") {
+			new Notice("Active file is not a markdown note.");
+			return null;
+		}
+
+		let paired = await isNotebookPaired(this.app, activeFile);
+		if (!paired) {
+			if (!this.plugin.settings.autoConvertToNotebookOnRun) {
+				new Notice("Active note is not paired with a notebook.");
+				return null;
+			}
+
+			const created = await this.plugin.fileSync.createNotebook(false);
+			if (!created) {
+				return null;
+			}
+
+			paired = await isNotebookPaired(this.app, activeFile);
+			if (!paired) {
+				new Notice("Failed to pair note with a notebook before running.");
+				return null;
+			}
+		}
+
+		const notePath = getAbsolutePath(activeFile);
+
+		return {
+			activeFile,
+			notePath,
+			ipynbPath: notePath.replace(/\.md$/, ".ipynb"),
+		};
+	}
+
+	private async prepareExecutionContext(): Promise<{ notePath: string; ipynbPath: string } | null> {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) return null;
 
-		const currentPath = getAbsolutePath(activeFile);
+		const notePath = getAbsolutePath(activeFile);
 		if (
 			this.currentNotePath &&
-			this.currentNotePath !== currentPath
+			this.currentNotePath !== notePath
 		) {
 			await this.restartKernel()
 			await sleep(500)
 		}
 
-		this.currentNotePath = currentPath;
+		this.currentNotePath = notePath;
 
 		return {
-			ipynbPath: currentPath.replace(/\.md$/, ".ipynb"),
+			notePath,
+			ipynbPath: notePath.replace(/\.md$/, ".ipynb"),
 		};
 	}
 
@@ -123,10 +208,13 @@ export class CodeExecutor {
 	}
 
 	async executeCodeBlock(codeBlock: CodeBlock, mode: CodeExecutionMode = "cell") {
+		const notebookContext = await this.getActiveNotebookContextForRun();
+		if (!notebookContext) return;
+
 		const executionContext = await this.prepareExecutionContext();
 		if (!executionContext) return;
 
-		const {ipynbPath} = executionContext;
+		const {notePath, ipynbPath} = executionContext;
 		let codeBlocksToRun = [codeBlock];
 
 		if (mode !== "cell") {
@@ -138,6 +226,50 @@ export class CodeExecutor {
 			codeBlocks: codeBlocksToRun,
 			ipynbPath,
 		});
+		this.notifyOutputsUpdated(notePath);
+	}
+
+	async executeAllCodeBlocksInCurrentFile() {
+		const notebookContext = await this.getActiveNotebookContextForRun();
+		if (!notebookContext) return;
+
+		const executionContext = await this.prepareExecutionContext();
+		if (!executionContext) return;
+
+		const codeBlocks = await this.getNotebookCodeBlocks(notebookContext.ipynbPath);
+		if (codeBlocks.length === 0) {
+			new Notice("No code blocks found in the current notebook.");
+			return;
+		}
+
+		await this.runCodeBlocksAndUpdateNotebook({
+			codeBlocks,
+			ipynbPath: notebookContext.ipynbPath,
+		});
+		this.notifyOutputsUpdated(notebookContext.notePath);
+		new Notice(`Ran ${codeBlocks.length} code block${codeBlocks.length === 1 ? "" : "s"}.`);
+	}
+
+	async clearAllOutputsInCurrentFile() {
+		const notebookContext = await this.getActivePairedNotebookContext();
+		if (!notebookContext) return;
+
+		try {
+			const raw = await fs.readFile(notebookContext.ipynbPath, "utf-8");
+			const notebook = JSON.parse(raw);
+			const codeCells = notebook.cells.filter((cell: { cell_type: string }) => cell.cell_type === "code");
+
+			for (const cell of codeCells) {
+				cell.outputs = [];
+			}
+
+			await fs.writeFile(notebookContext.ipynbPath, JSON.stringify(notebook, null, 2));
+			this.notifyOutputsUpdated(notebookContext.notePath);
+			new Notice(`Cleared outputs for ${codeCells.length} code block${codeCells.length === 1 ? "" : "s"}.`);
+		} catch (err) {
+			new Notice("Error clearing notebook outputs, check console for details");
+			console.error("Error clearing notebook outputs:", err);
+		}
 	}
 
 	async runCodeAndUpdateNotebook({codeBlock, ipynbPath}: {
