@@ -141,11 +141,11 @@ export class FileSync {
 		}
 	}
 
-	async createNotebook() {
+	async createNotebook(refreshView: boolean = true): Promise<boolean> {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) {
 			new Notice("No active note found.");
-			return;
+			return false;
 		}
 
 		const mdPath = getAbsolutePath(activeFile);
@@ -153,7 +153,7 @@ export class FileSync {
 
 		if (await isNotebookPaired(this.app, activeFile)) {
 			new Notice("Notebook is already paired with this note.");
-			return;
+			return true;
 		}
 
 		try {
@@ -177,16 +177,20 @@ export class FileSync {
 				"--update-metadata", metadata,
 			]);
 
-			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-			const leaf = this.app.workspace.getLeavesOfType(
-				view?.getViewType() ?? ""
-			)[0];
+			if (refreshView) {
+				const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+				const leaf = this.app.workspace.getLeavesOfType(
+					view?.getViewType() ?? ""
+				)[0];
 
-			(leaf as any).rebuildView();
+				(leaf as any).rebuildView();
+			}
 
 			new Notice(`Notebook created and paired: ${ipynbPath}`);
+			return true;
 		} catch (error: any) {
 			new Notice(`Failed to create notebook: ${error.message}`);
+			return false;
 		}
 	}
 
@@ -225,11 +229,9 @@ export class FileSync {
 		const ipynbPath = filePath.replace(/\.md$/, ".ipynb");
 
 		try {
-			if (this.settings.bidirectionalSync) {
-				await runJupytext(this.pythonPath, ["--sync", ipynbPath]);
-			} else {
-				await runJupytext(this.pythonPath, ["--to", "ipynb", filePath]);
-			}
+			// `--sync` updates the paired notebook from markdown changes while preserving
+			// existing notebook outputs instead of recreating the .ipynb from scratch.
+			await runJupytext(this.pythonPath, ["--sync", ipynbPath]);
 		} catch (error: any) {
 			console.error(`Failed to sync Markdown file: ${error.message}`);
 		}
