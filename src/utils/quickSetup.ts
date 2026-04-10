@@ -42,7 +42,7 @@ export async function runQuickSetup(app: App, plugin: JupyMDPlugin): Promise<boo
 		plugin.settings.pythonInterpreter = venvPythonPath;
 		await plugin.saveSettings();
 
-		new Notice("Quick setup complete! Virtual environment created successfully.");
+		new Notice("Quick setup complete! Virtual environment created successfully. Please restart Obsidian to apply changes.");
 		return true;
 	} catch (error: any) {
 		console.error("Quick setup failed:", error);
