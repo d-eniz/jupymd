@@ -9,10 +9,8 @@ import {LoadIcon} from "../svg/LoadIcon";
 import RunAboveIcon from "../svg/RunAboveIcon";
 import RunBelowIcon from "../svg/RunBelowIcon";
 import ChevronDownIcon from "../svg/ChevronDownIcon";
-import {CodeBlock, CodeExecutionMode, PythonBlockProps} from "./types";
+import {CodeBlock, CodeExecutionMode, OUTPUTS_UPDATED_EVENT, PythonBlockProps} from "./types";
 import {HighlightedCodeBlock} from "./HighlightedCodeBlock";
-
-const OUTPUTS_UPDATED_EVENT = "jupymd:outputs-updated";
 
 export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 																code = "# No code provided",
@@ -455,77 +453,74 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 	return (
 		<div className="code-container">
 			<div className="code-top-bar">
-				{isPaired && (
-					<div className="code-buttons">
-						<div
-							className={`run-action-group${isRunMenuOpen ? " run-action-group-open" : ""}`}
-							ref={runMenuRef}
-						>
-							<button
-								onClick={handleRun}
-								disabled={isLoading}
-								className="split-run-button split-run-button-main"
-								aria-label="Run cell"
-							>
-								{isLoading ? (
-									<LoadIcon className="icon grey-icon"/>
-								) : (
-									<RunIcon className="icon grey-icon"/>
-								)}
-							</button>
-							<button
-								onClick={handleToggleRunMenu}
-								disabled={isLoading}
-								className="split-run-button split-run-button-toggle"
-								aria-label="More run actions"
-								aria-haspopup="menu"
-								aria-expanded={isRunMenuOpen}
-							>
-								<ChevronDownIcon className="icon grey-icon chevron-icon"/>
-							</button>
-						</div>
-						{isRunMenuOpen && createPortal(
-							<div
-								className="run-dropdown-menu"
-								role="menu"
-								ref={runDropdownMenuRef}
-								style={runMenuPosition ? {
-									top: `${runMenuPosition.top}px`,
-									left: `${runMenuPosition.left}px`,
-								} : undefined}
-							>
-								<button
-									onClick={handleRunAbove}
-									disabled={isLoading || currentIndex === 0}
-									className="run-dropdown-item"
-									role="menuitem"
-									aria-label="Run above"
-								>
-									<RunAboveIcon className="icon grey-icon"/>
-								</button>
-								<button
-									onClick={handleRunCellAndBelow}
-									disabled={isLoading}
-									className="run-dropdown-item"
-									role="menuitem"
-									aria-label="Run below"
-								>
-									<RunBelowIcon className="icon grey-icon"/>
-								</button>
-							</div>,
-							document.body
-						)}
+				<div className="code-buttons">
+					<div
+						className={`run-action-group${isRunMenuOpen ? " run-action-group-open" : ""}`}
+						ref={runMenuRef}
+					>
 						<button
-							onClick={handleClear}
-							disabled={!hasOutput}
-							className="icon-button"
-							aria-label="Clear output"
+							onClick={handleRun}
+							disabled={isLoading}
+							className="split-run-button split-run-button-main"
+							aria-label="Run cell"
 						>
-							<ClearIcon className="icon grey-icon"/>
+							{isLoading ? (
+								<LoadIcon className="icon grey-icon"/>
+							) : (
+								<RunIcon className="icon grey-icon"/>
+							)}
+						</button>
+						<button
+							onClick={handleToggleRunMenu}
+							disabled={isLoading}
+							className="split-run-button split-run-button-toggle"
+							aria-label="More run actions"
+							aria-haspopup="menu"
+							aria-expanded={isRunMenuOpen}
+						>
+							<ChevronDownIcon className="icon grey-icon chevron-icon"/>
 						</button>
 					</div>
-				)}
-				{!isPaired && <div/>}
+					{isRunMenuOpen && createPortal(
+						<div
+							className="run-dropdown-menu"
+							role="menu"
+							ref={runDropdownMenuRef}
+							style={runMenuPosition ? {
+								top: `${runMenuPosition.top}px`,
+								left: `${runMenuPosition.left}px`,
+							} : undefined}
+						>
+							<button
+								onClick={handleRunAbove}
+								disabled={isLoading || currentIndex === 0}
+								className="run-dropdown-item"
+								role="menuitem"
+								aria-label="Run above"
+							>
+								<RunAboveIcon className="icon grey-icon"/>
+							</button>
+							<button
+								onClick={handleRunCellAndBelow}
+								disabled={isLoading}
+								className="run-dropdown-item"
+								role="menuitem"
+								aria-label="Run below"
+							>
+								<RunBelowIcon className="icon grey-icon"/>
+							</button>
+						</div>,
+						document.body
+					)}
+					<button
+						onClick={handleClear}
+						disabled={!hasOutput}
+						className="icon-button"
+						aria-label="Clear output"
+					>
+						<ClearIcon className="icon grey-icon"/>
+					</button>
+				</div>
 				<div className="code-lang-label">
 					Python
 				</div>
