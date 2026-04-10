@@ -1,12 +1,18 @@
 import * as React from "react";
-import {useState, useEffect, JSX, useRef} from "react";
+import {useState, useEffect, useLayoutEffect, JSX, useRef} from "react";
 import * as fs from 'fs/promises';
+import {createPortal} from "react-dom";
 import {isNotebookPaired} from "../utils/helpers";
-import {RunIcon} from "../svg/RunIcon";
+import RunIcon from "../svg/RunIcon";
 import {ClearIcon} from "../svg/ClearIcon";
 import {LoadIcon} from "../svg/LoadIcon";
-import {CodeBlock, PythonBlockProps} from "./types";
+import RunAboveIcon from "../svg/RunAboveIcon";
+import RunBelowIcon from "../svg/RunBelowIcon";
+import ChevronDownIcon from "../svg/ChevronDownIcon";
+import {CodeBlock, CodeExecutionMode, PythonBlockProps} from "./types";
 import {HighlightedCodeBlock} from "./HighlightedCodeBlock";
+
+const OUTPUTS_UPDATED_EVENT = "jupymd:outputs-updated";
 
 export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 																code = "# No code provided",
@@ -21,14 +27,26 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 	const [isPaired, setIsPaired] = useState<boolean>(false);
 	const [blockCount, setBlockCount] = useState<number>(0);
 	const [currentIndex, setCurrentIndex] = useState<number>(index ?? 0);
+	const [isRunMenuOpen, setIsRunMenuOpen] = useState<boolean>(false);
+	const [runMenuPosition, setRunMenuPosition] = useState<{ top: number; left: number } | null>(null);
 
 	const activeFile = plugin.app.workspace.getActiveFile();
 	const prevBlockCountRef = useRef<number>(0);
 	const prevCodeRef = useRef<string>(code);
 	const codeBlockRef = useRef<HTMLDivElement>(null);
+	const runMenuRef = useRef<HTMLDivElement>(null);
+	const runDropdownMenuRef = useRef<HTMLDivElement>(null);
 
 	const SYNC_CHECK_INTERVAL = 100; // ms
 	const MAX_SYNC_WAIT_TIME = 5000;
+
+	const notifyOutputsUpdated = () => {
+		if (!path) return;
+
+		document.dispatchEvent(new CustomEvent(OUTPUTS_UPDATED_EVENT, {
+			detail: {path},
+		}));
+	};
 
 	const handleEditClick = async () => {
 		if (!activeFile || !plugin.app.workspace.activeEditor) return;
@@ -209,10 +227,10 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 		});
 	};
 
-	const handleRun = async () => {
-
+	const runCodeBlock = async (mode: CodeExecutionMode = "cell") => {
 		if (!executor || !path || currentIndex === undefined) return;
 
+		setIsRunMenuOpen(false);
 		setIsLoading(true);
 
 		try {
@@ -233,12 +251,13 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 				return;
 			}
 
-			await executor.executeCodeBlock(codeBlock);
+			await executor.executeCodeBlock(codeBlock, mode);
 
 			await reindexBlock();
 
 			setTimeout(async () => {
 				await renderOutputs();
+				notifyOutputsUpdated();
 				try {
 					await fs.utimes(path, new Date(), new Date());
 				} catch(e) {
@@ -257,8 +276,28 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 		}
 	};
 
+	const handleRun = async () => {
+		await runCodeBlock("cell");
+	};
+
+	const handleRunAbove = async () => {
+		await runCodeBlock("above");
+	};
+
+	const handleRunCellAndBelow = async () => {
+		await runCodeBlock("cell-and-below");
+	};
+
+	const handleToggleRunMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+		event.preventDefault();
+		event.stopPropagation();
+		setIsRunMenuOpen((value) => !value);
+	};
+
 	const handleClear = async () => {
 		if (!path || currentIndex === undefined) return;
+
+		setIsRunMenuOpen(false);
 
 		try {
 			const ipynbPath = path.replace(/\.md$/, ".ipynb");
@@ -281,6 +320,7 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 			await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
 			setOutput("");
 			setHasOutput(false);
+			notifyOutputsUpdated();
 		} catch (err) {
 			console.error("Error clearing outputs:", err);
 		}
@@ -325,23 +365,164 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 		};
 	}, [activeFile]);
 
+	useEffect(() => {
+		const handleDocumentMouseDown = (event: MouseEvent) => {
+			if (runMenuRef.current?.contains(event.target as Node)) {
+				return;
+			}
+
+			if (runDropdownMenuRef.current?.contains(event.target as Node)) {
+				return;
+			}
+
+			setIsRunMenuOpen(false);
+		};
+
+		const handleDocumentKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				setIsRunMenuOpen(false);
+			}
+		};
+
+		document.addEventListener("mousedown", handleDocumentMouseDown);
+		document.addEventListener("keydown", handleDocumentKeyDown);
+
+		return () => {
+			document.removeEventListener("mousedown", handleDocumentMouseDown);
+			document.removeEventListener("keydown", handleDocumentKeyDown);
+		};
+	}, []);
+
+	useLayoutEffect(() => {
+		if (!isRunMenuOpen) {
+			setRunMenuPosition(null);
+			return;
+		}
+
+		const updateRunMenuPosition = () => {
+			if (!runMenuRef.current || !runDropdownMenuRef.current) {
+				return;
+			}
+
+			const anchorRect = runMenuRef.current.getBoundingClientRect();
+			const menuRect = runDropdownMenuRef.current.getBoundingClientRect();
+			const gutter = 6;
+			const viewportPadding = 8;
+
+			let left = anchorRect.left;
+			if (left + menuRect.width > window.innerWidth - viewportPadding) {
+				left = Math.max(viewportPadding, window.innerWidth - menuRect.width - viewportPadding);
+			}
+
+			let top = anchorRect.bottom + gutter;
+			const fitsBelow = top + menuRect.height <= window.innerHeight - viewportPadding;
+			const aboveTop = anchorRect.top - menuRect.height - gutter;
+			if (!fitsBelow && aboveTop >= viewportPadding) {
+				top = aboveTop;
+			}
+
+			setRunMenuPosition({top, left});
+		};
+
+		updateRunMenuPosition();
+		window.addEventListener("resize", updateRunMenuPosition);
+		window.addEventListener("scroll", updateRunMenuPosition, true);
+
+		return () => {
+			window.removeEventListener("resize", updateRunMenuPosition);
+			window.removeEventListener("scroll", updateRunMenuPosition, true);
+		};
+	}, [isRunMenuOpen]);
+
+	useEffect(() => {
+		const handleOutputsUpdated = (event: Event) => {
+			const customEvent = event as CustomEvent<{path?: string}>;
+			if (customEvent.detail?.path && customEvent.detail.path !== path) {
+				return;
+			}
+
+			void reindexBlock();
+			void renderOutputs();
+		};
+
+		document.addEventListener(OUTPUTS_UPDATED_EVENT, handleOutputsUpdated);
+
+		return () => {
+			document.removeEventListener(OUTPUTS_UPDATED_EVENT, handleOutputsUpdated);
+		};
+	}, [path, code, currentIndex, blockCount, activeFile]);
+
 	return (
 		<div className="code-container">
 			<div className="code-top-bar">
 				{isPaired && (
 					<div className="code-buttons">
-						<button onClick={handleRun} disabled={isLoading} className="icon-button">
-							{isLoading ? (
-								<LoadIcon className="icon grey-icon"/>
-							) : (
-								<RunIcon className="icon grey-icon"/>
-							)}
-						</button>
-						{hasOutput && (
-							<button onClick={handleClear} className="icon-button">
-								<ClearIcon className="icon grey-icon"/>
+						<div
+							className={`run-action-group${isRunMenuOpen ? " run-action-group-open" : ""}`}
+							ref={runMenuRef}
+						>
+							<button
+								onClick={handleRun}
+								disabled={isLoading}
+								className="split-run-button split-run-button-main"
+								aria-label="Run cell"
+							>
+								{isLoading ? (
+									<LoadIcon className="icon grey-icon"/>
+								) : (
+									<RunIcon className="icon grey-icon"/>
+								)}
 							</button>
+							<button
+								onClick={handleToggleRunMenu}
+								disabled={isLoading}
+								className="split-run-button split-run-button-toggle"
+								aria-label="More run actions"
+								aria-haspopup="menu"
+								aria-expanded={isRunMenuOpen}
+							>
+								<ChevronDownIcon className="icon grey-icon chevron-icon"/>
+							</button>
+						</div>
+						{isRunMenuOpen && createPortal(
+							<div
+								className="run-dropdown-menu"
+								role="menu"
+								ref={runDropdownMenuRef}
+								style={runMenuPosition ? {
+									top: `${runMenuPosition.top}px`,
+									left: `${runMenuPosition.left}px`,
+								} : undefined}
+							>
+								<button
+									onClick={handleRunAbove}
+									disabled={isLoading || currentIndex === 0}
+									className="run-dropdown-item"
+									role="menuitem"
+									aria-label="Run above"
+								>
+									<RunAboveIcon className="icon grey-icon"/>
+								</button>
+								<button
+									onClick={handleRunCellAndBelow}
+									disabled={isLoading}
+									className="run-dropdown-item"
+									role="menuitem"
+									aria-label="Run below"
+								>
+									<RunBelowIcon className="icon grey-icon"/>
+								</button>
+							</div>,
+							document.body
 						)}
+						<button
+							onClick={handleClear}
+							disabled={!hasOutput}
+							className="icon-button"
+							aria-label="Clear output"
+						>
+							<ClearIcon className="icon grey-icon"/>
+						</button>
 					</div>
 				)}
 				{!isPaired && <div/>}
