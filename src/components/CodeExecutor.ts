@@ -1,7 +1,7 @@
 import JupyMDPlugin from "../main";
 import {App, Notice} from "obsidian";
 import {getAbsolutePath, runJupytext} from "../utils/helpers";
-import {CodeBlock} from "./types";
+import {CodeBlock, CodeExecutionMode} from "./types";
 import * as fs from "fs/promises";
 import * as path from "path";
 import {spawn, ChildProcess} from "child_process";
@@ -21,6 +21,91 @@ export class CodeExecutor {
 		this.pythonPath = pythonPath
 	}
 
+	private async prepareExecutionContext(): Promise<{ ipynbPath: string } | null> {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile) return null;
+
+		const currentPath = getAbsolutePath(activeFile);
+		if (
+			this.currentNotePath &&
+			this.currentNotePath !== currentPath
+		) {
+			await this.restartKernel()
+			await sleep(500)
+		}
+
+		this.currentNotePath = currentPath;
+
+		return {
+			ipynbPath: currentPath.replace(/\.md$/, ".ipynb"),
+		};
+	}
+
+	private async getNotebookCodeBlocks(ipynbPath: string): Promise<CodeBlock[]> {
+		const raw = await fs.readFile(ipynbPath, "utf-8");
+		const notebook = JSON.parse(raw);
+
+		return notebook.cells
+			.filter((cell: { cell_type: string }) => cell.cell_type === "code")
+			.map((cell: { source: string[] | string }, cellIndex: number) => ({
+				code: Array.isArray(cell.source) ? cell.source.join("") : cell.source ?? "",
+				cellIndex,
+			}));
+	}
+
+	private getCodeBlocksForMode(codeBlocks: CodeBlock[], cellIndex: number, mode: CodeExecutionMode): CodeBlock[] {
+		if (mode === "above") {
+			return codeBlocks.slice(0, cellIndex);
+		}
+
+		if (mode === "cell-and-below") {
+			return codeBlocks.slice(cellIndex);
+		}
+
+		return codeBlocks.filter((codeBlock) => codeBlock.cellIndex === cellIndex);
+	}
+
+	private applyExecutionResultToCell(cell: any, result: {
+		stdout: string;
+		stderr: string;
+		imageData?: string;
+	}) {
+		const {stdout, stderr, imageData} = result;
+		const outputs: any[] = [];
+
+		if (stdout && stdout.trim()) {
+			outputs.push({
+				output_type: "stream",
+				name: "stdout",
+				text: stdout.endsWith("\n") ? stdout : stdout + "\n",
+			});
+		}
+
+		if (stderr && stderr.trim()) {
+			outputs.push({
+				output_type: "stream",
+				name: "stderr",
+				text: stderr.endsWith("\n") ? stderr : stderr + "\n",
+			});
+		}
+
+		if (imageData && imageData.length > 0) {
+			outputs.push({
+				output_type: "display_data",
+				data: {
+					"image/png": imageData,
+				},
+				metadata: {},
+			});
+		}
+
+		cell.outputs = outputs;
+		cell.execution_count = (cell.execution_count ?? 0) + 1;
+
+		if (!cell.metadata) cell.metadata = {};
+		cell.metadata.jupyter = {is_executing: false};
+	}
+
 	private getExecutionEnv(): NodeJS.ProcessEnv {
 		const env = {...process.env};
 		const pythonPath = this.plugin.settings.pythonInterpreter;
@@ -37,27 +122,20 @@ export class CodeExecutor {
 		return env;
 	}
 
-	async executeCodeBlock(codeBlock: CodeBlock) {
-		const activeFile = this.app.workspace.getActiveFile();
-		if (!activeFile) return;
+	async executeCodeBlock(codeBlock: CodeBlock, mode: CodeExecutionMode = "cell") {
+		const executionContext = await this.prepareExecutionContext();
+		if (!executionContext) return;
 
-		const currentPath = getAbsolutePath(activeFile);
-		if (
-			this.currentNotePath &&
-			this.currentNotePath !== currentPath
-		) {
-			await this.restartKernel()
-			await sleep(500)
+		const {ipynbPath} = executionContext;
+		let codeBlocksToRun = [codeBlock];
+
+		if (mode !== "cell") {
+			const notebookCodeBlocks = await this.getNotebookCodeBlocks(ipynbPath);
+			codeBlocksToRun = this.getCodeBlocksForMode(notebookCodeBlocks, codeBlock.cellIndex, mode);
 		}
 
-		this.currentNotePath = currentPath;
-
-		if (!activeFile) return;
-
-		const ipynbPath = currentPath.replace(/\.md$/, ".ipynb");
-
-		await this.runCodeAndUpdateNotebook({
-			codeBlock: codeBlock,
+		await this.runCodeBlocksAndUpdateNotebook({
+			codeBlocks: codeBlocksToRun,
 			ipynbPath,
 		});
 	}
@@ -66,55 +144,38 @@ export class CodeExecutor {
 		codeBlock: CodeBlock;
 		ipynbPath: string;
 	}) {
-		try {
-			const result = await this.sendCodeToPython(codeBlock.code);
-			const {stdout, stderr, imageData} = result;
+		await this.runCodeBlocksAndUpdateNotebook({
+			codeBlocks: [codeBlock],
+			ipynbPath,
+		});
+	}
 
+	async runCodeBlocksAndUpdateNotebook({codeBlocks, ipynbPath}: {
+		codeBlocks: CodeBlock[];
+		ipynbPath: string;
+	}) {
+		if (codeBlocks.length === 0) {
+			return;
+		}
+
+		try {
 			const raw = await fs.readFile(ipynbPath, "utf-8");
 			const notebook = JSON.parse(raw);
-
-			const cell = notebook.cells.filter((cell: {
+			const notebookCodeCells = notebook.cells.filter((cell: {
 				cell_type: string
-			}) => cell.cell_type === "code")[codeBlock.cellIndex];
-			if (!cell) {
-				console.warn(`Cell with index ${codeBlock.cellIndex} not found.`);
-				return;
+			}) => cell.cell_type === "code");
+
+			for (const codeBlock of codeBlocks) {
+				const cell = notebookCodeCells[codeBlock.cellIndex];
+				if (!cell) {
+					console.warn(`Cell with index ${codeBlock.cellIndex} not found.`);
+					continue;
+				}
+
+				const result = await this.sendCodeToPython(codeBlock.code);
+				this.applyExecutionResultToCell(cell, result);
+				await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
 			}
-
-			const outputs: any[] = [];
-
-			if (stdout && stdout.trim()) {
-				outputs.push({
-					output_type: "stream",
-					name: "stdout",
-					text: stdout.endsWith("\n") ? stdout : stdout + "\n",
-				});
-			}
-
-			if (stderr && stderr.trim()) {
-				outputs.push({
-					output_type: "stream",
-					name: "stderr",
-					text: stderr.endsWith("\n") ? stderr : stderr + "\n",
-				});
-			}
-
-			if (imageData && imageData.length > 0) {
-				outputs.push({
-					output_type: "display_data",
-					data: {
-						"image/png": imageData,
-					},
-					metadata: {},
-				});
-			}
-
-			cell.outputs = outputs;
-			cell.execution_count = (cell.execution_count ?? 0) + 1;
-
-			if (!cell.metadata) cell.metadata = {};
-			cell.metadata.jupyter = {is_executing: false};
-			await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
 
 			await runJupytext(this.pythonPath, ["--sync", ipynbPath]);
 
