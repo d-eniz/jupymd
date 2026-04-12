@@ -31,7 +31,7 @@ export default class JupyMDPlugin extends Plugin {
 		this.fileSync = new FileSync(this.app, this.settings.pythonInterpreter, this.settings);
 
 		this.kernelStatusBarItem = this.addStatusBarItem();
-		this.kernelStatusBarItem.addClass("jupymd-kernel-status");
+		this.kernelStatusBarItem.addClass("kernel-status");
 		void this.updateStatusBar();
 		this.kernelStatusBarItem.addEventListener("click", () => {
 			this.openKernelSelector();

@@ -201,3 +201,72 @@
 	border: none;
 	box-shadow: none;
 }
+
+.kernel-status {
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+	opacity: 0.85;
+}
+
+.kernel-status:hover {
+	opacity: 1;
+}
+
+.kernel-suggestion {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 2px 0;
+}
+
+.kernel-suggestion-top,
+.kernel-suggestion-bottom {
+	display: flex;
+	align-items: center;
+}
+
+.kernel-suggestion-top {
+	gap: 6px;
+}
+
+.kernel-suggestion-bottom {
+	gap: 8px;
+	font-size: 0.8em;
+	color: var(--text-muted);
+}
+
+.kernel-suggestion-label,
+.kernel-suggestion-version {
+	font-weight: 500;
+}
+
+.kernel-suggestion-badge {
+	font-size: 0.7em;
+	padding: 1px 5px;
+	border-radius: 3px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	font-weight: 600;
+	background-color: var(--background-modifier-border);
+	color: var(--text-muted);
+}
+
+.kernel-badge-venv { background-color: rgba(80, 160, 255, 0.18); color: #5090e0; }
+.kernel-badge-system { background-color: rgba(140, 120, 220, 0.18); color: #8070c0; }
+.kernel-badge-custom { background-color: rgba(230, 150, 60, 0.16); color: #c67a18; }
+
+.jupymd-interpreter-display,
+.kernel-suggestion-path {
+	font-size: var(--font-ui-small);
+}
+
+.jupymd-interpreter-display {
+	color: var(--text-muted);
+	font-family: var(--font-monospace);
+}
+
+.kernel-suggestion-path {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
