@@ -3,7 +3,6 @@ import {CodeExecutor} from "./CodeExecutor";
 import JupyMDPlugin from "../main";
 import {validatePythonPath} from "../utils/pythonPathUtils";
 import {installLibs} from "../utils/helpers";
-import {runQuickSetup} from "../utils/quickSetup";
 import {KernelSelectorModal} from "./KernelSelector";
 
 export class JupyMDSettingTab extends PluginSettingTab {
@@ -17,27 +16,6 @@ export class JupyMDSettingTab extends PluginSettingTab {
 	display(): void {
 		const {containerEl} = this;
 		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName("Quick setup")
-			.setDesc("Automatically create a virtual environment (.jupymd) in your vault root and install the required libraries. Requires restart to take effect.")
-			.addButton((btn) => {
-				btn.setButtonText("Run")
-					.setCta()
-					.onClick(async () => {
-						btn.setDisabled(true);
-						btn.setButtonText("Setting up...");
-
-						const success = await runQuickSetup(this.app, this.plugin);
-
-						btn.setDisabled(false);
-						btn.setButtonText(success ? "Setup Complete" : "Run Quick Setup");
-
-						if (success) {
-							this.display();
-						}
-					});
-			});
 
 		const desc = document.createDocumentFragment();
 		desc.appendText("Select the Python interpreter.");
