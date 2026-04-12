@@ -8,8 +8,10 @@ import {registerCommands} from "./commands";
 import {createRoot} from "react-dom/client";
 import {PythonCodeBlock} from "./components/CodeBlock";
 import {getAbsolutePath, isNotebookPaired} from "./utils/helpers";
+import {discoverKernels} from "./utils/kernelDiscovery";
 import {getDefaultPythonPath} from "./utils/pythonPathUtils";
 import * as fs from "fs";
+import * as path from "path";
 
 export default class JupyMDPlugin extends Plugin {
 	settings: JupyMDPluginSettings;
@@ -192,6 +194,16 @@ export default class JupyMDPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
+	private async formatInterpreterForStatusBar(interpreter: string): Promise<string> {
+		const kernels = await discoverKernels(this.app);
+		const match = kernels.find((kernel) => kernel.path === interpreter);
+		if (match) {
+			return match.label;
+		}
+
+		return path.basename(interpreter) || interpreter;
+	}
+
 	private async updateStatusBar(): Promise<void> {
 		if (!this.kernelStatusBarItem) return;
 
@@ -208,8 +220,9 @@ export default class JupyMDPlugin extends Plugin {
 		}
 
 		const interpreter = this.settings.pythonInterpreter ? this.settings.pythonInterpreter : "No interpreter";
+		const statusText = await this.formatInterpreterForStatusBar(interpreter);
 		this.kernelStatusBarItem.show();
-		this.kernelStatusBarItem.setText(interpreter);
+		this.kernelStatusBarItem.setText(statusText);
 		this.kernelStatusBarItem.setAttr("aria-label", `Current Python interpreter: ${interpreter} — click to change`);
 	}
 
