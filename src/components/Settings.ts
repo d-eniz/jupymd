@@ -42,10 +42,8 @@ export class JupyMDSettingTab extends PluginSettingTab {
 		const desc = document.createDocumentFragment();
 		desc.appendText("Select the Python interpreter.");
 		desc.createEl("br");
-		desc.createEl("a", {
-			text: "Read manual setup guide.",
-			href: "https://github.com/d-eniz/jupymd/blob/master/README.md#manual-setup",
-		});
+		desc.createEl("strong", { text: "Current interpreter:" });
+		desc.appendText(` ${this.plugin.settings.pythonInterpreter || "No interpreter selected"}`);
 
 		const interpreterSetting = new Setting(containerEl)
 			.setName("Python interpreter")
@@ -57,13 +55,6 @@ export class JupyMDSettingTab extends PluginSettingTab {
 						new KernelSelectorModal(this.app, this.plugin).open();
 					});
 			});
-
-		interpreterSetting.controlEl.prepend(
-			createDiv({
-				cls: "jupymd-interpreter-display",
-				text: this.plugin.settings.pythonInterpreter || "No interpreter selected",
-			})
-		);
 
 		new Setting(containerEl)
 			.setName("Install required libraries")
