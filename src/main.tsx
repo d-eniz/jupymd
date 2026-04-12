@@ -1,4 +1,4 @@
-import {Plugin, TFile, TAbstractFile, MarkdownView} from "obsidian";
+import {Plugin, TFile, TAbstractFile, MarkdownView, setTooltip} from "obsidian";
 import {JupyMDSettingTab} from "./components/Settings";
 import {CodeExecutor} from "./components/CodeExecutor";
 import {FileSync} from "./components/FileSync";
@@ -223,7 +223,8 @@ export default class JupyMDPlugin extends Plugin {
 		const statusText = await this.formatInterpreterForStatusBar(interpreter);
 		this.kernelStatusBarItem.show();
 		this.kernelStatusBarItem.setText(statusText);
-		this.kernelStatusBarItem.setAttr("aria-label", `Current Python interpreter: ${interpreter} — click to change`);
+		setTooltip(this.kernelStatusBarItem, `Current Python interpreter: ${interpreter} — click to change`, {placement: "top"});
+		
 	}
 
 	async updateInterpreter(newPath: string): Promise<void> {
