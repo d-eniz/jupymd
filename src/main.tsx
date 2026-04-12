@@ -1,20 +1,25 @@
-import {Plugin, TFile, TAbstractFile, MarkdownView} from "obsidian";
+import {Plugin, TFile, TAbstractFile, MarkdownView, setTooltip} from "obsidian";
 import {JupyMDSettingTab} from "./components/Settings";
 import {CodeExecutor} from "./components/CodeExecutor";
 import {FileSync} from "./components/FileSync";
+import {KernelSelectorModal} from "./components/KernelSelector";
 import {DEFAULT_SETTINGS, JupyMDPluginSettings} from "./components/types";
 import {registerCommands} from "./commands";
 import {createRoot} from "react-dom/client";
 import {PythonCodeBlock} from "./components/CodeBlock";
 import {getAbsolutePath, isNotebookPaired} from "./utils/helpers";
+import {discoverKernels} from "./utils/kernelDiscovery";
 import {getDefaultPythonPath} from "./utils/pythonPathUtils";
 import * as fs from "fs";
+import * as path from "path";
 
 export default class JupyMDPlugin extends Plugin {
 	settings: JupyMDPluginSettings;
 	executor: CodeExecutor;
 	fileSync: FileSync;
 	currentNotePath: string | null = null;
+	private kernelStatusBarItem : HTMLElement;
+	private settingTab : JupyMDSettingTab;
 
 	async onload() {
 		await this.loadSettings();
@@ -27,9 +32,17 @@ export default class JupyMDPlugin extends Plugin {
 		this.executor = new CodeExecutor(this, this.settings.pythonInterpreter, this.app);
 		this.fileSync = new FileSync(this.app, this.settings.pythonInterpreter, this.settings);
 
+		this.kernelStatusBarItem = this.addStatusBarItem();
+		this.kernelStatusBarItem.addClass("kernel-status");
+		void this.updateStatusBar();
+		this.kernelStatusBarItem.addEventListener("click", () => {
+			this.openKernelSelector();
+		});
+
 		registerCommands(this);
 
-		this.addSettingTab(new JupyMDSettingTab(this.app, this));
+		this.settingTab = new JupyMDSettingTab(this.app, this);
+		this.addSettingTab(this.settingTab);
 
 		this.registerEvent(
 			this.app.vault.on("modify", async (file: TAbstractFile) => {
@@ -79,6 +92,21 @@ export default class JupyMDPlugin extends Plugin {
 					} catch (e) {
 						console.error("Failed to rename paired notebook:", e);
 					}
+				}
+			})
+		);
+
+		this.registerEvent(
+			this.app.workspace.on("file-open", () => {
+				void this.updateStatusBar();
+			})
+		);
+
+		this.registerEvent(
+			this.app.metadataCache.on("changed", (file) => {
+				const activeFile = this.app.workspace.getActiveFile();
+				if (activeFile && activeFile.path === file.path) {
+					void this.updateStatusBar();
 				}
 			})
 		);
@@ -164,5 +192,54 @@ export default class JupyMDPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	private async formatInterpreterForStatusBar(interpreter: string): Promise<string> {
+		const kernels = await discoverKernels(this.app);
+		const match = kernels.find((kernel) => kernel.path === interpreter);
+		if (match) {
+			return match.label;
+		}
+
+		return path.basename(interpreter) || interpreter;
+	}
+
+	private async updateStatusBar(): Promise<void> {
+		if (!this.kernelStatusBarItem) return;
+
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!(activeFile instanceof TFile)) {
+			this.kernelStatusBarItem.hide();
+			return;
+		}
+
+		const isPaired = await isNotebookPaired(this.app, activeFile);
+		if (!isPaired) {
+			this.kernelStatusBarItem.hide();
+			return;
+		}
+
+		const interpreter = this.settings.pythonInterpreter ? this.settings.pythonInterpreter : "No interpreter";
+		const statusText = await this.formatInterpreterForStatusBar(interpreter);
+		this.kernelStatusBarItem.show();
+		this.kernelStatusBarItem.setText(statusText);
+		setTooltip(this.kernelStatusBarItem, `Current Python interpreter: ${interpreter} — click to change`, {placement: "top"});
+		
+	}
+
+	async updateInterpreter(newPath: string): Promise<void> {
+		this.settings.pythonInterpreter = newPath;
+		await this.saveSettings();
+
+		this.executor.cleanup();
+		this.executor = new CodeExecutor(this, newPath, this.app);
+		this.fileSync = new FileSync(this.app, newPath, this.settings);
+
+		await this.updateStatusBar();
+		this.settingTab?.display();
+	}
+
+	openKernelSelector(): void {
+		new KernelSelectorModal(this.app, this).open();
 	}
 }

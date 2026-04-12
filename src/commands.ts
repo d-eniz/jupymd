@@ -5,6 +5,12 @@ export function registerCommands(plugin: JupyMDPlugin) {
 	const { executor } = plugin;
 
 	plugin.addCommand({
+		id: "select-python-kernel",
+		name: "Select Python kernel",
+		callback: () => plugin.openKernelSelector(),
+	});
+
+	plugin.addCommand({
 		id: "create-jupyter-notebook",
 		name: "Create Jupyter notebook from note",
 		callback: () => fileSync.createNotebook(),
