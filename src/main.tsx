@@ -37,10 +37,10 @@ export default class JupyMDPlugin extends Plugin {
 			this.openKernelSelector();
 		});
 
-
 		registerCommands(this);
 
-		this.addSettingTab(new JupyMDSettingTab(this.app, this));
+		this.settingTab = new JupyMDSettingTab(this.app, this);
+		this.addSettingTab(this.settingTab);
 
 		this.registerEvent(
 			this.app.vault.on("modify", async (file: TAbstractFile) => {
