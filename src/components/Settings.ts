@@ -20,7 +20,7 @@ export class JupyMDSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Quick setup")
-			.setDesc("Automatically create a virtual environment (.jupymd) in your vault root and install the required libraries. Requires restart to take effect.")
+			.setDesc("Automatically create a virtual environment (.jupymd) in your vault root and install the required libraries.")
 			.addButton((btn) => {
 				btn.setButtonText("Run")
 					.setCta()

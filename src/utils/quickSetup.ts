@@ -39,10 +39,9 @@ export async function runQuickSetup(app: App, plugin: JupyMDPlugin): Promise<boo
 		new Notice("Installing libraries...");
 		await installLibs(venvPythonPath, "jupytext matplotlib")
 
-		plugin.settings.pythonInterpreter = venvPythonPath;
-		await plugin.saveSettings();
+		await plugin.updateInterpreter(venvPythonPath);
 
-		new Notice("Quick setup complete! Virtual environment created successfully. Please restart Obsidian to apply changes.");
+		new Notice("Quick setup complete! Virtual environment created successfully.");
 		return true;
 	} catch (error: any) {
 		console.error("Quick setup failed:", error);

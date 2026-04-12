@@ -254,6 +254,7 @@
 .kernel-badge-venv { background-color: rgba(80, 160, 255, 0.18); color: #5090e0; }
 .kernel-badge-system { background-color: rgba(140, 120, 220, 0.18); color: #8070c0; }
 .kernel-badge-custom { background-color: rgba(230, 150, 60, 0.16); color: #c67a18; }
+.kernel-badge-create { background-color: rgba(80, 190, 140, 0.18); color: #3d9a68; }
 
 .jupymd-interpreter-display,
 .kernel-suggestion-path {
