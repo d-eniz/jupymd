@@ -21,7 +21,7 @@ type CustomPathOption = {
 type CreateVenvOption = {
 	label: string;
 	path: string;
-	version: string;
+	version?: string;
 	type: "venv";
 	isCreateVenv: true;
 };
@@ -40,7 +40,6 @@ function createVenvOption(): CreateVenvOption {
 	return {
 		label: "Create virtual environment",
 		path: "Choose the base interpreter path and environment name",
-		version: "Setup",
 		type: "venv",
 		isCreateVenv: true,
 	};
@@ -162,7 +161,9 @@ export class KernelSelectorModal extends FuzzySuggestModal<KernelOption> {
 		});
 
 		const bottomRow = wrapper.createDiv({cls: "kernel-suggestion-bottom"});
-		bottomRow.createSpan({cls: "kernel-suggestion-version", text: item.version});
+		if (item.version) {
+			bottomRow.createSpan({cls: "kernel-suggestion-version", text: item.version});
+		}
 		bottomRow.createSpan({cls: "kernel-suggestion-path", text: item.path});
 	}
 
