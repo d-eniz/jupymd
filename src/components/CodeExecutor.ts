@@ -8,7 +8,7 @@ import {spawn, ChildProcess} from "child_process";
 
 export class CodeExecutor {
 	private currentNotePath: string | null = null;
-	private readonly pythonPath: string;
+	private pythonPath: string;
 	private pythonProcess: ChildProcess | null = null;
 	private isProcessReady = false;
 	private executionQueue: Array<{
@@ -19,6 +19,11 @@ export class CodeExecutor {
 
 	constructor(private plugin: JupyMDPlugin, pythonPath: string, private app: App) {
 		this.pythonPath = pythonPath
+	}
+
+	async setPythonInterpreter(pythonPath: string): Promise<void> {
+		this.pythonPath = pythonPath;
+		await this.restartKernel({silent: true});
 	}
 
 	private notifyOutputsUpdated(notePath: string) {
@@ -567,7 +572,9 @@ while True:
 		});
 	}
 
-	async restartKernel(): Promise<void> {
+	async restartKernel(options: {silent?: boolean} = {}): Promise<void> {
+		const {silent = false} = options;
+
 		return new Promise((resolve, reject) => {
 			if (this.pythonProcess) {
 				const processToKill = this.pythonProcess;
@@ -588,7 +595,9 @@ while True:
 						}
 					}
 
-					new Notice("Python kernel restarted");
+					if (!silent) {
+						new Notice("Python kernel restarted");
+					}
 					resolve();
 				});
 
@@ -600,7 +609,9 @@ while True:
 			} else {
 				this.isProcessReady = false;
 				this.currentNotePath = null;
-				new Notice("Python kernel restarted");
+				if (!silent) {
+					new Notice("Python kernel restarted");
+				}
 				resolve();
 			}
 		});
