@@ -1,4 +1,5 @@
 import * as path from "path";
+import * as fs from "fs";
 import {exec} from "child_process";
 import {promisify} from "util";
 import {App, FileSystemAdapter, Platform} from "obsidian";
@@ -44,16 +45,42 @@ async function probeInterpreter(
 	return {label, path: pythonPath, version, type};
 }
 
-async function discoverVaultVenv(app: App): Promise<KernelInfo[]> {
+function getVenvPythonPath(envDir: string): string {
+	return Platform.isWin
+		? path.join(envDir, "Scripts", "python.exe")
+		: path.join(envDir, "bin", "python");
+}
+
+async function discoverVenvs(app: App): Promise<KernelInfo[]> {
 	const basePath = getVaultBasePath(app);
 	if (!basePath) return [];
 
-	const pythonBin = Platform.isWin
-		? path.join(basePath, ".jupymd", "Scripts", "python.exe")
-		: path.join(basePath, ".jupymd", "bin", "python");
+	const results: KernelInfo[] = [];
 
-	const result = await probeInterpreter(pythonBin, ".jupymd (vault venv)", "venv");
-	return result ? [result] : [];
+	try {
+		const entries = fs.readdirSync(basePath, {withFileTypes: true});
+		for (const entry of entries) {
+			if (!entry.isDirectory() || !entry.name.startsWith(".")) {
+				continue;
+			}
+
+			const envDir = path.join(basePath, entry.name);
+			const pyvenvCfgPath = path.join(envDir, "pyvenv.cfg");
+			if (!fs.existsSync(pyvenvCfgPath)) {
+				continue;
+			}
+
+			const pythonPath = getVenvPythonPath(envDir);
+			const result = await probeInterpreter(pythonPath, entry.name, "venv");
+			if (result) {
+				results.push(result);
+			}
+		}
+	} catch {
+		return [];
+	}
+
+	return results;
 }
 
 function getGlobalInterpreterCandidates(): string[] {
@@ -94,13 +121,13 @@ async function discoverGlobalInterpreters(): Promise<KernelInfo[]> {
 }
 
 export async function discoverKernels(app: App): Promise<KernelInfo[]> {
-	const [vaultVenv, globals] = await Promise.all([
-		discoverVaultVenv(app),
+	const [venvs, globals] = await Promise.all([
+		discoverVenvs(app),
 		discoverGlobalInterpreters(),
 	]);
 
 	return [
-		...vaultVenv,
+		...venvs,
 		...globals,
 	];
 }

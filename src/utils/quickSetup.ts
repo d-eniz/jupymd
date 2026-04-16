@@ -9,7 +9,12 @@ import {getDefaultPythonPath} from "./pythonPathUtils";
 
 const execAsync = promisify(exec);
 
-export async function runQuickSetup(app: App, plugin: JupyMDPlugin): Promise<boolean> {
+export async function runQuickSetup(
+	app: App,
+	plugin: JupyMDPlugin,
+	basePythonPath?: string,
+	envNameInput?: string
+): Promise<boolean> {
 	const adapter = app.vault.adapter as any;
 	if (!adapter.getBasePath) {
 		new Notice("Quick setup is only supported on local file systems.");
@@ -17,12 +22,16 @@ export async function runQuickSetup(app: App, plugin: JupyMDPlugin): Promise<boo
 	}
 
 	const basePath = adapter.getBasePath();
-	const venvPath = path.join(basePath, ".jupymd");
+	let envName = envNameInput?.trim() || ".jupymd";
+	envName = envName.startsWith(".") ? envName : `.${envName}`;
+	const venvPath = path.join(basePath, envName);
 
 	new Notice("Creating virtual environment... Please wait.");
 
 	try {
-		const basePython = plugin.settings.pythonInterpreter || getDefaultPythonPath();
+		const basePython = basePythonPath?.trim()
+			|| plugin.settings.pythonInterpreter
+			|| getDefaultPythonPath();
 
 		await execAsync(`"${basePython}" -m venv "${venvPath}"`);
 
@@ -39,10 +48,9 @@ export async function runQuickSetup(app: App, plugin: JupyMDPlugin): Promise<boo
 		new Notice("Installing libraries...");
 		await installLibs(venvPythonPath, "jupytext matplotlib")
 
-		plugin.settings.pythonInterpreter = venvPythonPath;
-		await plugin.saveSettings();
+		await plugin.updateInterpreter(venvPythonPath);
 
-		new Notice("Quick setup complete! Virtual environment created successfully. Please restart Obsidian to apply changes.");
+		new Notice(`Quick setup complete! Virtual environment '${envName}' created successfully.`);
 		return true;
 	} catch (error: any) {
 		console.error("Quick setup failed:", error);

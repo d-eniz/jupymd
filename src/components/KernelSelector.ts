@@ -1,7 +1,9 @@
 import {App, FuzzySuggestModal, FuzzyMatch, Notice} from "obsidian";
 import JupyMDPlugin from "../main";
+import {CreateVenvModal} from "./CreateVenvModal";
 import {discoverKernels, KernelInfo} from "../utils/kernelDiscovery";
 import {validatePythonPath} from "../utils/pythonPathUtils";
+import {runQuickSetup} from "../utils/quickSetup";
 
 const TYPE_BADGE: Record<KernelInfo["type"], string> = {
 	venv: "venv",
@@ -16,10 +18,32 @@ type CustomPathOption = {
 	isCustomPath: true;
 };
 
-type KernelOption = KernelInfo | CustomPathOption;
+type CreateVenvOption = {
+	label: string;
+	path: string;
+	version: string;
+	type: "venv";
+	isCreateVenv: true;
+};
+
+type KernelOption = KernelInfo | CustomPathOption | CreateVenvOption;
 
 function isCustomPathOption(option: KernelOption): option is CustomPathOption {
 	return "isCustomPath" in option;
+}
+
+function isCreateVenvOption(option: KernelOption): option is CreateVenvOption {
+	return "isCreateVenv" in option;
+}
+
+function createVenvOption(): CreateVenvOption {
+	return {
+		label: "Create virtual environment",
+		path: "Choose the base interpreter path and environment name",
+		version: "Setup",
+		type: "venv",
+		isCreateVenv: true,
+	};
 }
 
 export class KernelSelectorModal extends FuzzySuggestModal<KernelOption> {
@@ -82,14 +106,27 @@ export class KernelSelectorModal extends FuzzySuggestModal<KernelOption> {
 
 	getSuggestions(query: string): FuzzyMatch<KernelOption>[] {
 		const suggestions = super.getSuggestions(query);
+		const createOptionSuggestion: FuzzyMatch<KernelOption> = {
+			item: createVenvOption(),
+			match: {
+				score: -2,
+				matches: [],
+			},
+		};
+
 		const typed = query.trim();
-		if (!typed) return suggestions;
+		if (!typed) {
+			return [createOptionSuggestion, ...suggestions];
+		}
 
 		const normalizedTyped = typed.toLowerCase();
 		const hasExactPathMatch = this.kernels.some((kernel) => kernel.path.toLowerCase() === normalizedTyped);
-		if (hasExactPathMatch) return suggestions;
+		if (hasExactPathMatch) {
+			return [createOptionSuggestion, ...suggestions];
+		}
 
 		return [
+			createOptionSuggestion,
 			{
 				item: {
 					label: `Use custom path: ${typed}`,
@@ -120,8 +157,8 @@ export class KernelSelectorModal extends FuzzySuggestModal<KernelOption> {
 		const topRow = wrapper.createDiv({cls: "kernel-suggestion-top"});
 		topRow.createSpan({cls: "kernel-suggestion-label", text: item.label});
 		topRow.createSpan({
-			cls: `kernel-suggestion-badge ${isCustomPathOption(item) ? "kernel-badge-custom" : `kernel-badge-${item.type}`}`,
-			text: isCustomPathOption(item) ? "custom" : TYPE_BADGE[item.type],
+			cls: `kernel-suggestion-badge ${isCustomPathOption(item) ? "kernel-badge-custom" : isCreateVenvOption(item) ? "kernel-badge-create" : `kernel-badge-${item.type}`}`,
+			text: isCustomPathOption(item) ? "custom" : isCreateVenvOption(item) ? "setup" : TYPE_BADGE[item.type],
 		});
 
 		const bottomRow = wrapper.createDiv({cls: "kernel-suggestion-bottom"});
@@ -130,6 +167,30 @@ export class KernelSelectorModal extends FuzzySuggestModal<KernelOption> {
 	}
 
 	async onChooseItem(item: KernelOption) {
+		if (isCreateVenvOption(item)) {
+			const config = await new CreateVenvModal(
+				this.app,
+				this.plugin.settings.pythonInterpreter
+			).openAndGetValue();
+			if (!config) {
+				return;
+			}
+
+			const success = await runQuickSetup(
+				this.app,
+				this.plugin,
+				config.basePythonPath,
+				config.envName
+			);
+			if (!success) {
+				return;
+			}
+
+			this.kernels = await discoverKernels(this.app);
+			this.close();
+			return;
+		}
+
 		if (isCustomPathOption(item)) {
 			const valid = await validatePythonPath(item.path);
 			if (!valid) {
