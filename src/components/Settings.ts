@@ -4,6 +4,7 @@ import JupyMDPlugin from "../main";
 import {validatePythonPath} from "../utils/pythonPathUtils";
 import {installLibs} from "../utils/helpers";
 import {KernelSelectorModal} from "./KernelSelector";
+import {formatKernelLabel, getInterpreterInfo} from "../utils/kernelDiscovery";
 
 export class JupyMDSettingTab extends PluginSettingTab {
 	plugin: JupyMDPlugin;
@@ -18,12 +19,13 @@ export class JupyMDSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		const desc = document.createDocumentFragment();
-		desc.appendText("Select the Python interpreter.");
-		desc.createEl("br");
-		desc.createEl("strong", { text: "Current interpreter:" });
-		desc.appendText(` ${this.plugin.settings.pythonInterpreter || "No interpreter selected"}`);
+		const descWrapper = document.createElement("div");
+		const summaryEl = descWrapper.createEl("div");
+		const pathEl = descWrapper.createEl("div");
+		desc.appendChild(descWrapper);
+		void this.updateInterpreterDescription(summaryEl, pathEl);
 
-		const interpreterSetting = new Setting(containerEl)
+		new Setting(containerEl)
 			.setName("Python interpreter")
 			.setDesc(desc)
 			.addButton((btn) => {
@@ -104,5 +106,28 @@ export class JupyMDSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				})
 			})
+	}
+
+	private async updateInterpreterDescription(summaryEl: HTMLElement, pathEl: HTMLElement): Promise<void> {
+		const interpreter = this.plugin.settings.pythonInterpreter;
+
+		summaryEl.empty();
+		summaryEl.createEl("strong", {text: "Current interpreter:"});
+
+		if (!interpreter) {
+			summaryEl.appendText(" No interpreter selected");
+			pathEl.empty();
+			return;
+		}
+
+		pathEl.setText(interpreter);
+
+		const info = await getInterpreterInfo(this.app, interpreter);
+		if (info) {
+			summaryEl.appendText(` ${formatKernelLabel(info.label, info.version)}`);
+			return;
+		}
+
+		summaryEl.appendText(` ${interpreter}`);
 	}
 }
