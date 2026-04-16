@@ -1,4 +1,4 @@
-import {Plugin, TFile, TAbstractFile, MarkdownView, setTooltip} from "obsidian";
+import {Plugin, TFile, TAbstractFile, MarkdownView, Notice, setTooltip} from "obsidian";
 import {JupyMDSettingTab} from "./components/Settings";
 import {CodeExecutor} from "./components/CodeExecutor";
 import {FileSync} from "./components/FileSync";
@@ -8,7 +8,7 @@ import {registerCommands} from "./commands";
 import {createRoot} from "react-dom/client";
 import {PythonCodeBlock} from "./components/CodeBlock";
 import {getAbsolutePath, isNotebookPaired} from "./utils/helpers";
-import {discoverKernels} from "./utils/kernelDiscovery";
+import {formatKernelLabel, getInterpreterInfo} from "./utils/kernelDiscovery";
 import {getDefaultPythonPath} from "./utils/pythonPathUtils";
 import * as fs from "fs";
 import * as path from "path";
@@ -35,8 +35,8 @@ export default class JupyMDPlugin extends Plugin {
 		this.kernelStatusBarItem = this.addStatusBarItem();
 		this.kernelStatusBarItem.addClass("kernel-status");
 		void this.updateStatusBar();
-		this.kernelStatusBarItem.addEventListener("click", () => {
-			this.openKernelSelector();
+		this.registerDomEvent(this.kernelStatusBarItem, "click", (event: MouseEvent) => {
+			void this.handleKernelStatusBarClick(event);
 		});
 
 		registerCommands(this);
@@ -195,10 +195,9 @@ export default class JupyMDPlugin extends Plugin {
 	}
 
 	private async formatInterpreterForStatusBar(interpreter: string): Promise<string> {
-		const kernels = await discoverKernels(this.app);
-		const match = kernels.find((kernel) => kernel.path === interpreter);
-		if (match) {
-			return match.label;
+		const info = await getInterpreterInfo(this.app, interpreter);
+		if (info) {
+			return formatKernelLabel(info.label, info.version);
 		}
 
 		return path.basename(interpreter) || interpreter;
@@ -223,16 +222,36 @@ export default class JupyMDPlugin extends Plugin {
 		const statusText = await this.formatInterpreterForStatusBar(interpreter);
 		this.kernelStatusBarItem.show();
 		this.kernelStatusBarItem.setText(statusText);
-		setTooltip(this.kernelStatusBarItem, `Current Python interpreter: ${interpreter} — click to change`, {placement: "top"});
+		setTooltip(this.kernelStatusBarItem, `Current Python interpreter: ${interpreter}\nClick to change interpreter\nShift + click to copy path`, {placement: "top"});
 		
+	}
+
+	private async handleKernelStatusBarClick(event: MouseEvent): Promise<void> {
+		if (!event.shiftKey) {
+			this.openKernelSelector();
+			return;
+		}
+
+		const interpreter = this.settings.pythonInterpreter;
+		if (!interpreter) {
+			new Notice("No interpreter path to copy");
+			return;
+		}
+
+		try {
+			await navigator.clipboard.writeText(interpreter);
+			new Notice("Interpreter path copied");
+		} catch (error) {
+			console.error("Failed to copy interpreter path:", error);
+			new Notice("Failed to copy interpreter path");
+		}
 	}
 
 	async updateInterpreter(newPath: string): Promise<void> {
 		this.settings.pythonInterpreter = newPath;
 		await this.saveSettings();
 
-		this.executor.cleanup();
-		this.executor = new CodeExecutor(this, newPath, this.app);
+		await this.executor.setPythonInterpreter(newPath);
 		this.fileSync = new FileSync(this.app, newPath, this.settings);
 
 		await this.updateStatusBar();
