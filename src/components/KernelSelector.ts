@@ -45,6 +45,22 @@ function createVenvOption(): CreateVenvOption {
 	};
 }
 
+function getKernelBadge(item: KernelOption): {cls: string; text: string} {
+	if (isCustomPathOption(item)) {
+		return {cls: "kernel-badge-custom", text: "custom"};
+	}
+
+	if (isCreateVenvOption(item)) {
+		return {cls: "kernel-badge-create", text: "recommended"};
+	}
+
+	if (item.source === "pyenv") {
+		return {cls: "kernel-badge-pyenv", text: "pyenv"};
+	}
+
+	return {cls: `kernel-badge-${item.type}`, text: TYPE_BADGE[item.type]};
+}
+
 export class KernelSelectorModal extends FuzzySuggestModal<KernelOption> {
 	private plugin: JupyMDPlugin;
 	private kernels: KernelInfo[] = [];
@@ -150,14 +166,15 @@ export class KernelSelectorModal extends FuzzySuggestModal<KernelOption> {
 
 	renderSuggestion(match: FuzzyMatch<KernelOption>, el: HTMLElement) {
 		const item = match.item;
+		const badge = getKernelBadge(item);
 
 		const wrapper = el.createDiv({cls: "kernel-suggestion"});
 
 		const topRow = wrapper.createDiv({cls: "kernel-suggestion-top"});
 		topRow.createSpan({cls: "kernel-suggestion-label", text: item.label});
 		topRow.createSpan({
-			cls: `kernel-suggestion-badge ${isCustomPathOption(item) ? "kernel-badge-custom" : isCreateVenvOption(item) ? "kernel-badge-create" : `kernel-badge-${item.type}`}`,
-			text: isCustomPathOption(item) ? "custom" : isCreateVenvOption(item) ? "setup" : TYPE_BADGE[item.type],
+			cls: `kernel-suggestion-badge ${badge.cls}`,
+			text: badge.text,
 		});
 
 		const bottomRow = wrapper.createDiv({cls: "kernel-suggestion-bottom"});
