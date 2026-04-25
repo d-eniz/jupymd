@@ -83,6 +83,18 @@ Move your Jupyter notebook to your vault. Executing the following command will l
 
 This will create a Markdown note (`.md`) with the same file name as the notebook in the same directory where the Jupyter notebook is.
 
+## Security & Privacy Notice
+
+JupyMD may access directories outside your Obsidian vault to detect available Python interpreters.
+
+This includes:
+
+- System-wide Python installations (e.g. `/usr/bin/python`, `python3`)
+- Virtual environments located inside your vault (e.g. `.venv`)
+- Optional pyenv-managed Python versions (e.g. `~/.pyenv/versions`)
+
+This access is required to automatically discover and list available Python environments and allow users to select an interpreter for code execution. JupyMD does not transmit any data over the network or modify files outside your vault.
+
 ## Contributing
 
 Please read the [contribution guidelines](https://github.com/d-eniz/jupymd/blob/master/CONTRIBUTING.md) if you want to contribute to JupyMD.
