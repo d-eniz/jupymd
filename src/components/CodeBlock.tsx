@@ -289,6 +289,8 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 		if (!path || currentIndex === undefined) return;
 
 		setIsRunMenuOpen(false);
+		setOutput("");
+		setHasOutput(false);
 
 		try {
 			const ipynbPath = path.replace(/\.md$/, ".ipynb");
@@ -296,6 +298,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 			try {
 				await fs.access(ipynbPath);
 			} catch (e) {
+				await renderOutputs();
 				return;
 			}
 
@@ -304,6 +307,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 			const cells = notebook.cells.filter((c: { cell_type: string }) => c.cell_type === "code");
 
 			if (cells.length <= currentIndex || !cells[currentIndex]) {
+				await renderOutputs();
 				return;
 			}
 
@@ -311,11 +315,10 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 			cells[currentIndex].execution_count = null;
 			await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
 			await runJupytext(plugin.settings.toolingPython, ["--sync", ipynbPath]);
-			setOutput("");
-			setHasOutput(false);
 			notifyOutputsUpdated();
 		} catch (err) {
 			console.error("Error clearing outputs:", err);
+			await renderOutputs();
 		}
 	};
 
@@ -431,7 +434,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 		return () => {
 			document.removeEventListener(OUTPUTS_UPDATED_EVENT, handleOutputsUpdated);
 		};
-	}, [path, currentIndex, activeFile, executionEnabled]);
+	}, [path, code, currentIndex, activeFile, executionEnabled]);
 
 	return (
 		<div className="code-container">
