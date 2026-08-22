@@ -183,15 +183,24 @@ export default class JupyMDPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			await this.loadData()
-		);
+		const loaded = await this.loadData() as Partial<JupyMDPluginSettings> | null;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded || {});
+		if (!this.settings.toolingPython) {
+			this.settings.toolingPython = loaded?.pythonInterpreter || getDefaultPythonPath();
+			await this.saveSettings();
+		}
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	async updateToolingPython(newPath: string): Promise<void> {
+		this.settings.toolingPython = newPath;
+		await this.saveSettings();
+		this.fileSync = new FileSync(this.app, newPath, this.settings);
+		this.settingTab?.display();
+		new Notice(`Jupyter tooling environment set to: ${newPath}`);
 	}
 
 	private async formatInterpreterForStatusBar(interpreter: string): Promise<string> {

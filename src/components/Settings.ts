@@ -1,10 +1,10 @@
-import {App, PluginSettingTab, Setting, Notice} from "obsidian";
-import {CodeExecutor} from "./CodeExecutor";
+import {App, PluginSettingTab, Setting} from "obsidian";
 import JupyMDPlugin from "../main";
-import {validatePythonPath} from "../utils/pythonPathUtils";
-import {installLibs} from "../utils/helpers";
-import {KernelSelectorModal} from "./KernelSelector";
-import {formatKernelLabel, getInterpreterInfo} from "../utils/kernelDiscovery";
+import {selectAndPrepareToolingEnvironment} from "./KernelSelector";
+import {
+	formatPythonEnvironmentLabel,
+	getPythonEnvironmentInfo,
+} from "../utils/pythonEnvironmentDiscovery";
 
 export class JupyMDSettingTab extends PluginSettingTab {
 	plugin: JupyMDPlugin;
@@ -23,32 +23,22 @@ export class JupyMDSettingTab extends PluginSettingTab {
 		const summaryEl = descWrapper.createEl("div");
 		const pathEl = descWrapper.createEl("div");
 		desc.appendChild(descWrapper);
-		void this.updateInterpreterDescription(summaryEl, pathEl);
+		void this.updateToolingDescription(summaryEl, pathEl);
 
 		new Setting(containerEl)
-			.setName("Python interpreter")
+			.setName("Jupyter tooling environment")
 			.setDesc(desc)
 			.addButton((btn) => {
-				btn.setButtonText("Select interpreter")
-					.setCta()
-					.onClick(() => {
-						new KernelSelectorModal(this.app, this.plugin).open();
-					});
-			});
-
-		new Setting(containerEl)
-			.setName("Install required libraries")
-			.setDesc("Install Jupytext and matplotlib for specified interpreter using pip.")
-			.addButton((btn) =>
-				btn
-					.setButtonText("Install")
+				btn.setButtonText("Select environment")
 					.setCta()
 					.onClick(async () => {
-						new Notice("Installing libraries...");
-
-						await installLibs(this.plugin.settings.pythonInterpreter, "jupytext matplotlib")
-					})
-			);
+						const selected = await selectAndPrepareToolingEnvironment(
+							this.app,
+							this.plugin.settings.toolingPython
+						);
+						if (selected) await this.plugin.updateToolingPython(selected);
+					});
+			});
 
 		containerEl.createEl("h4", {text: "General"});
 
@@ -64,7 +54,7 @@ export class JupyMDSettingTab extends PluginSettingTab {
 			})
 
 		new Setting(containerEl)
-			.setName("Custom Python code blocks")
+			.setName("Custom notebook code blocks")
 			.setDesc("When disabled, the default Obsidian code block will be used. Requires restart to take effect.")
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.enableCodeBlocks)
@@ -108,11 +98,11 @@ export class JupyMDSettingTab extends PluginSettingTab {
 			})
 	}
 
-	private async updateInterpreterDescription(summaryEl: HTMLElement, pathEl: HTMLElement): Promise<void> {
-		const interpreter = this.plugin.settings.pythonInterpreter;
+	private async updateToolingDescription(summaryEl: HTMLElement, pathEl: HTMLElement): Promise<void> {
+		const interpreter = this.plugin.settings.toolingPython;
 
 		summaryEl.empty();
-		summaryEl.createEl("strong", {text: "Current interpreter:"});
+		summaryEl.createEl("strong", {text: "Current tooling Python:"});
 
 		if (!interpreter) {
 			summaryEl.appendText(" No interpreter selected");
@@ -122,9 +112,9 @@ export class JupyMDSettingTab extends PluginSettingTab {
 
 		pathEl.setText(interpreter);
 
-		const info = await getInterpreterInfo(this.app, interpreter);
+		const info = await getPythonEnvironmentInfo(this.app, interpreter);
 		if (info) {
-			summaryEl.appendText(` ${formatKernelLabel(info.label, info.version)}`);
+			summaryEl.appendText(` ${formatPythonEnvironmentLabel(info.label, info.version)}`);
 			return;
 		}
 
