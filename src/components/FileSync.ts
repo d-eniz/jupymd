@@ -142,11 +142,7 @@ export class FileSync {
 		}
 	}
 
-	async createNotebook(kernelOrRefresh: KernelConnection | boolean = true, refreshView: boolean = true): Promise<boolean> {
-		const kernel = typeof kernelOrRefresh === "boolean"
-			? ({displayName: "Python 3", language: "python", name: "python3"} as KernelConnection)
-			: kernelOrRefresh;
-		if (typeof kernelOrRefresh === "boolean") refreshView = kernelOrRefresh;
+	async createNotebook(kernel: KernelConnection, refreshView: boolean = true): Promise<boolean> {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) {
 			new Notice("No active note found.");

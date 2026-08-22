@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: JupyMDPluginSettings = {
 export type CodeBlock = {
 	code: string;
 	cellIndex: number;
+	language?: string;
 }
 
 export type CodeExecutionMode = "cell" | "above" | "cell-and-below";

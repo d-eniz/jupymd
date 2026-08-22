@@ -2,21 +2,28 @@ import {Plugin, TFile, TAbstractFile, MarkdownView, Notice, setTooltip} from "ob
 import {JupyMDSettingTab} from "./components/Settings";
 import {CodeExecutor} from "./components/CodeExecutor";
 import {FileSync} from "./components/FileSync";
-import {KernelSelectorModal} from "./components/KernelSelector";
+import {NotebookKernelSelectorModal} from "./components/KernelSelector";
 import {DEFAULT_SETTINGS, JupyMDPluginSettings} from "./components/types";
 import {registerCommands} from "./commands";
 import {createRoot} from "react-dom/client";
 import {PythonCodeBlock} from "./components/CodeBlock";
-import {getAbsolutePath, isNotebookPaired} from "./utils/helpers";
+import {getAbsolutePath, isNotebookPaired, runJupytext} from "./utils/helpers";
 import {formatKernelLabel, getInterpreterInfo} from "./utils/kernelDiscovery";
 import {getDefaultPythonPath} from "./utils/pythonPathUtils";
 import * as fs from "fs";
 import * as path from "path";
+import {ManagedKernelSpecStore} from "./kernels/ManagedKernelSpecStore";
+import {JupyterBridgeClient} from "./bridge/JupyterBridgeClient";
+import {NotebookKernelService} from "./kernels/NotebookKernelService";
+import {KernelConnection} from "./kernels/types";
 
 export default class JupyMDPlugin extends Plugin {
 	settings: JupyMDPluginSettings;
 	executor: CodeExecutor;
 	fileSync: FileSync;
+	kernelService: NotebookKernelService;
+	private bridge: JupyterBridgeClient;
+	private managedKernelSpecs: ManagedKernelSpecStore;
 	currentNotePath: string | null = null;
 	private kernelStatusBarItem : HTMLElement;
 	private settingTab : JupyMDSettingTab;
@@ -24,13 +31,14 @@ export default class JupyMDPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		if (!this.settings.pythonInterpreter) {
-			this.settings.pythonInterpreter = getDefaultPythonPath();
-			await this.saveSettings();
-		}
-
-		this.executor = new CodeExecutor(this, this.settings.pythonInterpreter, this.app);
-		this.fileSync = new FileSync(this.app, this.settings.pythonInterpreter, this.settings);
+		this.managedKernelSpecs = new ManagedKernelSpecStore(this.app, this.manifest.id);
+		this.bridge = new JupyterBridgeClient(
+			this.settings.toolingPython,
+			this.managedKernelSpecs.jupyterDataDir
+		);
+		this.kernelService = new NotebookKernelService(this.bridge, this.managedKernelSpecs);
+		this.executor = new CodeExecutor(this, this.kernelService, this.app);
+		this.fileSync = new FileSync(this.app, this.settings.toolingPython, this.settings);
 
 		this.kernelStatusBarItem = this.addStatusBarItem();
 		this.kernelStatusBarItem.addClass("kernel-status");
@@ -179,7 +187,7 @@ export default class JupyMDPlugin extends Plugin {
 	}
 
 	async onunload() {
-		this.executor.cleanup();
+		await this.executor.cleanup();
 	}
 
 	async loadSettings() {
@@ -198,10 +206,78 @@ export default class JupyMDPlugin extends Plugin {
 	async updateToolingPython(newPath: string): Promise<void> {
 		this.settings.toolingPython = newPath;
 		await this.saveSettings();
+		await this.bridge.setToolingPython(newPath);
 		this.fileSync = new FileSync(this.app, newPath, this.settings);
 		this.settingTab?.display();
 		new Notice(`Jupyter tooling environment set to: ${newPath}`);
 	}
+
+	async createNotebookWithKernel(refreshView = true, preferredLanguage?: string): Promise<boolean> {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!(activeFile instanceof TFile) || activeFile.extension !== "md") {
+			new Notice("Open a Markdown note before creating a notebook.");
+			return false;
+		}
+
+		if (await isNotebookPaired(this.app, activeFile)) {
+			new Notice("Notebook is already paired with this note.");
+			return true;
+		}
+
+		const kernel = await new NotebookKernelSelectorModal(this.app, this, undefined, preferredLanguage).openAndGetValue();
+		if (!kernel) return false;
+		const created = await this.fileSync.createNotebook(kernel, refreshView);
+		if (created) await this.updateStatusBar();
+		return created;
+	}
+
+	async ensureKernelForNote(notePath: string): Promise<KernelConnection | null> {
+		try {
+			const existing = await this.kernelService.resolveKernelForNote(notePath);
+			if (existing) return existing;
+		} catch (error) {
+			console.error("Failed to resolve notebook kernel:", error);
+		}
+
+		return this.selectKernelForNote(notePath);
+	}
+
+	async selectKernelForNote(notePath?: string): Promise<KernelConnection | null> {
+		const activeFile = this.app.workspace.getActiveFile();
+		const targetPath = notePath || (activeFile instanceof TFile ? getAbsolutePath(activeFile) : null);
+		if (!targetPath) {
+			new Notice("No active notebook note.");
+			return null;
+		}
+
+		const ipynbPath = targetPath.replace(/\.md$/, ".ipynb");
+		if (!fs.existsSync(ipynbPath)) {
+			new Notice("Create the paired notebook before selecting its kernel.");
+			return null;
+		}
+
+		let currentName: string | undefined;
+		try {
+			const notebook = JSON.parse(fs.readFileSync(ipynbPath, "utf-8"));
+			currentName = notebook?.metadata?.kernelspec?.name;
+		} catch {
+			// The selector can still offer recovery for malformed/missing metadata.
+		}
+
+		const selected = await new NotebookKernelSelectorModal(this.app, this, currentName).openAndGetValue();
+		if (!selected) return null;
+
+		await this.kernelService.setKernelForNote(targetPath, selected);
+		await runJupytext(this.settings.toolingPython, ["--sync", ipynbPath]);
+		await this.updateStatusBar();
+		new Notice(`Notebook kernel set to: ${selected.displayName}`);
+		return selected;
+	}
+
+	openKernelSelector(): void {
+		void this.selectKernelForNote();
+	}
+
 
 	private async formatInterpreterForStatusBar(interpreter: string): Promise<string> {
 		const info = await getInterpreterInfo(this.app, interpreter);
@@ -256,18 +332,4 @@ export default class JupyMDPlugin extends Plugin {
 		}
 	}
 
-	async updateInterpreter(newPath: string): Promise<void> {
-		this.settings.pythonInterpreter = newPath;
-		await this.saveSettings();
-
-		await this.executor.setPythonInterpreter(newPath);
-		this.fileSync = new FileSync(this.app, newPath, this.settings);
-
-		await this.updateStatusBar();
-		this.settingTab?.display();
-	}
-
-	openKernelSelector(): void {
-		new KernelSelectorModal(this.app, this).open();
-	}
 }

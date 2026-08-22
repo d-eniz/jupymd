@@ -2,34 +2,23 @@ import JupyMDPlugin from "../main";
 import {App, Notice, TFile} from "obsidian";
 import {getAbsolutePath, isNotebookPaired, runJupytext} from "../utils/helpers";
 import {CodeBlock, CodeExecutionMode, OUTPUTS_UPDATED_EVENT} from "./types";
+import {NotebookKernelService} from "../kernels/NotebookKernelService";
+import {KernelExecutionResult} from "../kernels/types";
+import {languageSupportRegistry} from "../languages/LanguageSupport";
+import {getExecutableCellIndices} from "../notebook/NotebookCellIndex";
 import * as fs from "fs/promises";
-import * as path from "path";
-import {spawn, ChildProcess} from "child_process";
 
 export class CodeExecutor {
 	private currentNotePath: string | null = null;
-	private pythonPath: string;
-	private pythonProcess: ChildProcess | null = null;
-	private isProcessReady = false;
-	private executionQueue: Array<{
-		code: string;
-		resolve: (result: any) => void;
-		reject: (error: any) => void;
-	}> = [];
 
-	constructor(private plugin: JupyMDPlugin, pythonPath: string, private app: App) {
-		this.pythonPath = pythonPath
-	}
-
-	async setPythonInterpreter(pythonPath: string): Promise<void> {
-		this.pythonPath = pythonPath;
-		await this.restartKernel({silent: true});
-	}
+	constructor(
+		private plugin: JupyMDPlugin,
+		private kernelService: NotebookKernelService,
+		private app: App
+	) {}
 
 	private notifyOutputsUpdated(notePath: string) {
-		if (typeof document === "undefined") {
-			return;
-		}
+		if (typeof document === "undefined") return;
 
 		document.dispatchEvent(new CustomEvent(OUTPUTS_UPDATED_EVENT, {
 			detail: {path: notePath},
@@ -58,7 +47,6 @@ export class CodeExecutor {
 		}
 
 		const notePath = getAbsolutePath(activeFile);
-
 		return {
 			activeFile,
 			notePath,
@@ -66,7 +54,7 @@ export class CodeExecutor {
 		};
 	}
 
-	private async getActiveNotebookContextForRun(): Promise<{
+	private async getActiveNotebookContextForRun(preferredLanguage?: string): Promise<{
 		activeFile: TFile;
 		notePath: string;
 		ipynbPath: string;
@@ -89,11 +77,8 @@ export class CodeExecutor {
 				return null;
 			}
 
-			const created = await this.plugin.fileSync.createNotebook(false);
-			if (!created) {
-				return null;
-			}
-
+			const created = await this.plugin.createNotebookWithKernel(false, preferredLanguage);
+			if (!created) return null;
 			paired = await isNotebookPaired(this.app, activeFile);
 			if (!paired) {
 				new Notice("Failed to pair note with a notebook before running.");
@@ -102,6 +87,8 @@ export class CodeExecutor {
 		}
 
 		const notePath = getAbsolutePath(activeFile);
+		const kernel = await this.plugin.ensureKernelForNote(notePath);
+		if (!kernel) return null;
 
 		return {
 			activeFile,
@@ -110,138 +97,92 @@ export class CodeExecutor {
 		};
 	}
 
-	private async prepareExecutionContext(): Promise<{ notePath: string; ipynbPath: string } | null> {
-		const activeFile = this.app.workspace.getActiveFile();
-		if (!activeFile) return null;
-
-		const notePath = getAbsolutePath(activeFile);
-		if (
-			this.currentNotePath &&
-			this.currentNotePath !== notePath
-		) {
-			await this.restartKernel()
-			await sleep(500)
+	private async prepareExecutionContext(notePath: string): Promise<void> {
+		if (this.currentNotePath && this.currentNotePath !== notePath) {
+			await this.kernelService.shutdown(this.currentNotePath).catch(() => undefined);
 		}
-
 		this.currentNotePath = notePath;
-
-		return {
-			notePath,
-			ipynbPath: notePath.replace(/\.md$/, ".ipynb"),
-		};
 	}
 
-	private async getNotebookCodeBlocks(ipynbPath: string): Promise<CodeBlock[]> {
+	private async getNotebookCodeBlocks(
+		ipynbPath: string,
+		notePath?: string,
+		kernelLanguage?: string
+	): Promise<CodeBlock[]> {
 		const raw = await fs.readFile(ipynbPath, "utf-8");
 		const notebook = JSON.parse(raw);
 
-		return notebook.cells
-			.filter((cell: { cell_type: string }) => cell.cell_type === "code")
-			.map((cell: { source: string[] | string }, cellIndex: number) => ({
+		const codeBlocks: CodeBlock[] = notebook.cells
+			.filter((cell: {cell_type: string}) => cell.cell_type === "code")
+			.map((cell: {source: string[] | string}, cellIndex: number) => ({
 				code: Array.isArray(cell.source) ? cell.source.join("") : cell.source ?? "",
 				cellIndex,
 			}));
+
+		if (!notePath || !kernelLanguage) return codeBlocks;
+		const markdown = await fs.readFile(notePath, "utf-8");
+		const executableIndices = new Set(getExecutableCellIndices(markdown, kernelLanguage));
+		return codeBlocks.filter((codeBlock) => executableIndices.has(codeBlock.cellIndex));
 	}
 
 	private getCodeBlocksForMode(codeBlocks: CodeBlock[], cellIndex: number, mode: CodeExecutionMode): CodeBlock[] {
-		if (mode === "above") {
-			return codeBlocks.slice(0, cellIndex);
-		}
-
-		if (mode === "cell-and-below") {
-			return codeBlocks.slice(cellIndex);
-		}
-
+		if (mode === "above") return codeBlocks.filter((codeBlock) => codeBlock.cellIndex < cellIndex);
+		if (mode === "cell-and-below") return codeBlocks.filter((codeBlock) => codeBlock.cellIndex >= cellIndex);
 		return codeBlocks.filter((codeBlock) => codeBlock.cellIndex === cellIndex);
 	}
 
-	private applyExecutionResultToCell(cell: any, result: {
-		stdout: string;
-		stderr: string;
-		imageData?: string;
-	}) {
-		const {stdout, stderr, imageData} = result;
-		const outputs: any[] = [];
-
-		if (stdout && stdout.trim()) {
-			outputs.push({
-				output_type: "stream",
-				name: "stdout",
-				text: stdout.endsWith("\n") ? stdout : stdout + "\n",
-			});
-		}
-
-		if (stderr && stderr.trim()) {
-			outputs.push({
-				output_type: "stream",
-				name: "stderr",
-				text: stderr.endsWith("\n") ? stderr : stderr + "\n",
-			});
-		}
-
-		if (imageData && imageData.length > 0) {
-			outputs.push({
-				output_type: "display_data",
-				data: {
-					"image/png": imageData,
-				},
-				metadata: {},
-			});
-		}
-
-		cell.outputs = outputs;
-		cell.execution_count = (cell.execution_count ?? 0) + 1;
-
-		if (!cell.metadata) cell.metadata = {};
+	private applyExecutionResultToCell(cell: any, result: KernelExecutionResult) {
+		cell.outputs = result.outputs;
+		cell.execution_count = result.executionCount;
+		cell.metadata = cell.metadata || {};
 		cell.metadata.jupyter = {is_executing: false};
 	}
 
-	private getExecutionEnv(): NodeJS.ProcessEnv {
-		const env = {...process.env};
-		const pythonPath = this.plugin.settings.pythonInterpreter;
-
-		if (pythonPath) {
-			const pythonDir = path.dirname(pythonPath);
-			env.PATH = `${pythonDir}${path.delimiter}${env.PATH || ""}`;
-
-			if (pythonDir.endsWith("bin") || pythonDir.endsWith("Scripts")) {
-				env.VIRTUAL_ENV = path.dirname(pythonDir);
-			}
-		}
-
-		return env;
-	}
-
 	async executeCodeBlock(codeBlock: CodeBlock, mode: CodeExecutionMode = "cell") {
-		const notebookContext = await this.getActiveNotebookContextForRun();
+		const notebookContext = await this.getActiveNotebookContextForRun(codeBlock.language);
 		if (!notebookContext) return;
+		const selectedKernel = await this.kernelService.resolveKernelForNote(notebookContext.notePath);
+		if (
+			codeBlock.language &&
+			selectedKernel &&
+			!languageSupportRegistry.matches(codeBlock.language, selectedKernel.language)
+		) {
+			new Notice(
+				`This notebook uses ${selectedKernel.language}; the ${codeBlock.language} block is not executable with that kernel.`
+			);
+			return;
+		}
+		await this.prepareExecutionContext(notebookContext.notePath);
 
-		const executionContext = await this.prepareExecutionContext();
-		if (!executionContext) return;
-
-		const {notePath, ipynbPath} = executionContext;
 		let codeBlocksToRun = [codeBlock];
-
 		if (mode !== "cell") {
-			const notebookCodeBlocks = await this.getNotebookCodeBlocks(ipynbPath);
+			const notebookCodeBlocks = await this.getNotebookCodeBlocks(
+				notebookContext.ipynbPath,
+				notebookContext.notePath,
+				selectedKernel?.language
+			);
 			codeBlocksToRun = this.getCodeBlocksForMode(notebookCodeBlocks, codeBlock.cellIndex, mode);
 		}
 
 		await this.runCodeBlocksAndUpdateNotebook({
 			codeBlocks: codeBlocksToRun,
-			ipynbPath,
+			ipynbPath: notebookContext.ipynbPath,
+			notePath: notebookContext.notePath,
 		});
-		this.notifyOutputsUpdated(notePath);
+		this.notifyOutputsUpdated(notebookContext.notePath);
 	}
 
 	async executeAllCodeBlocksInCurrentFile() {
 		const notebookContext = await this.getActiveNotebookContextForRun();
 		if (!notebookContext) return;
+		await this.prepareExecutionContext(notebookContext.notePath);
 
-		const executionContext = await this.prepareExecutionContext();
-		if (!executionContext) return;
-
-		const codeBlocks = await this.getNotebookCodeBlocks(notebookContext.ipynbPath);
+		const selectedKernel = await this.kernelService.resolveKernelForNote(notebookContext.notePath);
+		const codeBlocks = await this.getNotebookCodeBlocks(
+			notebookContext.ipynbPath,
+			notebookContext.notePath,
+			selectedKernel?.language
+		);
 		if (codeBlocks.length === 0) {
 			new Notice("No code blocks found in the current notebook.");
 			return;
@@ -250,6 +191,7 @@ export class CodeExecutor {
 		await this.runCodeBlocksAndUpdateNotebook({
 			codeBlocks,
 			ipynbPath: notebookContext.ipynbPath,
+			notePath: notebookContext.notePath,
 		});
 		this.notifyOutputsUpdated(notebookContext.notePath);
 		new Notice(`Ran ${codeBlocks.length} code block${codeBlocks.length === 1 ? "" : "s"}.`);
@@ -262,18 +204,20 @@ export class CodeExecutor {
 		try {
 			const raw = await fs.readFile(notebookContext.ipynbPath, "utf-8");
 			const notebook = JSON.parse(raw);
-			const codeCells = notebook.cells.filter((cell: { cell_type: string }) => cell.cell_type === "code");
+			const codeCells = notebook.cells.filter((cell: {cell_type: string}) => cell.cell_type === "code");
 
 			for (const cell of codeCells) {
 				cell.outputs = [];
+				cell.execution_count = null;
 			}
 
 			await fs.writeFile(notebookContext.ipynbPath, JSON.stringify(notebook, null, 2));
+			await runJupytext(this.plugin.settings.toolingPython, ["--sync", notebookContext.ipynbPath]);
 			this.notifyOutputsUpdated(notebookContext.notePath);
 			new Notice(`Cleared outputs for ${codeCells.length} code block${codeCells.length === 1 ? "" : "s"}.`);
-		} catch (err) {
+		} catch (error) {
 			new Notice("Error clearing notebook outputs, check console for details");
-			console.error("Error clearing notebook outputs:", err);
+			console.error("Error clearing notebook outputs:", error);
 		}
 	}
 
@@ -284,345 +228,65 @@ export class CodeExecutor {
 		await this.runCodeBlocksAndUpdateNotebook({
 			codeBlocks: [codeBlock],
 			ipynbPath,
+			notePath: ipynbPath.replace(/\.ipynb$/, ".md"),
 		});
 	}
 
-	async runCodeBlocksAndUpdateNotebook({codeBlocks, ipynbPath}: {
+	async runCodeBlocksAndUpdateNotebook({codeBlocks, ipynbPath, notePath}: {
 		codeBlocks: CodeBlock[];
 		ipynbPath: string;
+		notePath: string;
 	}) {
-		if (codeBlocks.length === 0) {
-			return;
-		}
+		if (codeBlocks.length === 0) return;
 
 		try {
 			const raw = await fs.readFile(ipynbPath, "utf-8");
 			const notebook = JSON.parse(raw);
-			const notebookCodeCells = notebook.cells.filter((cell: {
-				cell_type: string
-			}) => cell.cell_type === "code");
+			const notebookCodeCells = notebook.cells.filter((cell: {cell_type: string}) => cell.cell_type === "code");
 
 			for (const codeBlock of codeBlocks) {
 				const cell = notebookCodeCells[codeBlock.cellIndex];
 				if (!cell) {
-					console.warn(`Cell with index ${codeBlock.cellIndex} not found.`);
-					continue;
+					throw new Error(`Cell with index ${codeBlock.cellIndex} was not found after synchronization.`);
+				}
+				const cellSource = Array.isArray(cell.source) ? cell.source.join("") : cell.source || "";
+				if (cellSource.trim() !== codeBlock.code.trim()) {
+					throw new Error(
+						`Cell ${codeBlock.cellIndex + 1} no longer matches the Markdown source. Synchronize before running it.`
+					);
 				}
 
-				const result = await this.sendCodeToPython(codeBlock.code);
+				const result = await this.kernelService.execute(notePath, codeBlock.code);
 				this.applyExecutionResultToCell(cell, result);
 				await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
 			}
 
-			await runJupytext(this.pythonPath, ["--sync", ipynbPath]);
-
-		} catch (err) {
-			new Notice("Error updating notebook, check console for details")
-			console.error("Error updating notebook:", err);
+			await runJupytext(this.plugin.settings.toolingPython, ["--sync", ipynbPath]);
+		} catch (error) {
+			new Notice("Error executing notebook, check console for details");
+			console.error("Error executing notebook:", error);
+			throw error;
 		}
-	}
-
-	private async initializePythonProcess(): Promise<void> {
-		if (this.pythonProcess && !this.pythonProcess.killed) {
-			return;
-		}
-
-		return new Promise((resolve, reject) => {
-			const initCode = `
-import ast
-import sys
-import io
-import base64
-import traceback
-import json
-from contextlib import redirect_stdout, redirect_stderr
-import matplotlib.pyplot as plt
-import matplotlib
-matplotlib.use("Agg")
-
-def execute_code(code_str):
-    _stdout = io.StringIO()
-    _stderr = io.StringIO()
-    _img_buf = io.BytesIO()
-    _img_data = ""
-    
-    _fig_before = plt.get_fignums()
-    
-    try:
-        try:
-            parsed = ast.parse(code_str.strip())
-			# Check if this is a single expression
-            is_single_expression = (
-            len(parsed.body) == 1 and  # Only one thing in the code
-            isinstance(parsed.body[0], ast.Expr)  # And that thing is an expression
-            )
-
-            if is_single_expression:
-                # For single expressions, we want to capture and display the result
-                compiled_code = compile(code_str, '<string>', 'eval')  # Use 'eval' mode
-                
-                with redirect_stdout(_stdout), redirect_stderr(_stderr):
-                    result = eval(compiled_code)
-                    if result is not None:
-                        print(result)
-            else:
-                compiled_code = compile(code_str, '<string>', 'exec')
-        except SyntaxError as e:
-            _stderr.write(f"SyntaxError: {e.msg}\\n")
-            if e.text:
-                _stderr.write(f"Line {e.lineno}: {e.text}")
-            raise e
-        except Exception as e:
-            _stderr.write(f"Compilation error: {str(e)}\\n")
-            raise e
-        except SystemExit as e:
-            _stderr.write(f"SystemExit: {e.code}\\n")
-            raise e
-
-        if not is_single_expression:
-            try:
-                with redirect_stdout(_stdout), redirect_stderr(_stderr):
-                    exec(compiled_code, globals(), globals())
-                    
-                _fig_after = plt.get_fignums()
-                if len(_fig_after) > len(_fig_before):
-                    fig = plt.gcf()
-                    fig.tight_layout(pad=0)
-                    plt.savefig(_img_buf, format="png", bbox_inches='tight', pad_inches=0, dpi=100)
-                    _img_buf.seek(0)
-                    _img_data = base64.b64encode(_img_buf.read()).decode("utf-8")
-                    plt.close('all')
-                    
-            except Exception as e:
-                _stderr.write("".join(traceback.format_exception(type(e), e, e.__traceback__)))
-            except SystemExit as e:
-                _stderr.write(f"SystemExit: {e.code}\\n")
-            
-    except Exception as e:
-        _stderr.write("".join(traceback.format_exception(type(e), e, e.__traceback__)))
-    except SystemExit as e:
-        pass
-    
-    result = {
-        "stdout": _stdout.getvalue(),
-        "stderr": _stderr.getvalue(),
-        "imageData": _img_data
-    }
-    
-    print("###RESULT###")
-    print(json.dumps(result))
-    print("###END###")
-    sys.stdout.flush()
-
-print("PYTHON_READY")
-sys.stdout.flush()
-
-while True:
-    try:
-        line = input()
-        if line == "EXIT":
-            break
-        elif line.startswith("EXEC:"):
-            code_to_exec = line[5:]
-            if code_to_exec == "MULTILINE":
-                code_lines = []
-                while True:
-                    code_line = input()
-                    if code_line == "END_CODE":
-                        break
-                    code_lines.append(code_line)
-                code_to_exec = "\\n".join(code_lines)
-            
-            execute_code(code_to_exec)
-    except EOFError:
-        break
-    except SystemExit as e:
-        error_result = {
-            "stdout": "",
-            "stderr": f"SystemExit: {e.code}",
-            "imageData": ""
-        }
-        print("###RESULT###")
-        print(json.dumps(error_result))
-        print("###END###")
-        sys.stdout.flush()
-    except Exception as e:
-        error_result = {
-            "stdout": "",
-            "stderr": f"Python process error: {str(e)}",
-            "imageData": ""
-        }
-        print("###RESULT###")
-        print(json.dumps(error_result))
-        print("###END###")
-        sys.stdout.flush()
-`;
-
-			const workingDir = this.currentNotePath
-				? path.dirname(this.currentNotePath)
-				: process.cwd();
-
-
-			const pythonProcess = spawn(
-				this.plugin.settings.pythonInterpreter,
-				["-c", initCode],
-				{
-					env: this.getExecutionEnv(),
-					cwd: workingDir
-				}
-			);
-
-			this.pythonProcess = pythonProcess;
-
-			let initOutput = "";
-
-			pythonProcess.stdout?.setEncoding("utf-8");
-			pythonProcess.stdout?.on("data", (data) => {
-				const output = data.toString();
-				initOutput += output;
-
-				if (!this.isProcessReady && initOutput.includes("PYTHON_READY")) {
-					this.isProcessReady = true;
-					initOutput = initOutput.slice(initOutput.indexOf("PYTHON_READY") + "PYTHON_READY".length).trimStart();
-					resolve();
-					return;
-				}
-
-				while (this.executionQueue.length > 0 && initOutput.includes("###END###")) {
-					const currentExecution = this.executionQueue.shift();
-					if (currentExecution) {
-						try {
-							const resultMatch = initOutput.match(/###RESULT###\s*(.*?)\s*###END###/s);
-							if (resultMatch) {
-								const result = JSON.parse(resultMatch[1]);
-								currentExecution.resolve(result);
-								initOutput = initOutput.slice(resultMatch.index! + resultMatch[0].length);
-							} else {
-								currentExecution.reject(new Error("Failed to parse execution result"));
-								initOutput = "";
-							}
-						} catch (e) {
-							currentExecution.reject(e);
-							initOutput = "";
-						}
-					}
-				}
-			});
-
-			pythonProcess.stderr?.setEncoding("utf-8");
-			pythonProcess.stderr?.on("data", (data) => {
-				new Notice("Python process error, check console for details")
-				console.error("Python process stderr:", data.toString());
-			});
-
-			pythonProcess.on("close", (code) => {
-				console.log("Python process closed with code:", code);
-				if (this.pythonProcess === pythonProcess) {
-					this.pythonProcess = null;
-					this.isProcessReady = false;
-				}
-				while (this.executionQueue.length > 0) {
-					const execution = this.executionQueue.shift();
-					if (execution) {
-						execution.reject(new Error("Python process closed unexpectedly"));
-					}
-				}
-				reject(new Error(`Python process closed with code: ${code}`));
-			});
-
-			pythonProcess.on("error", (error) => {
-				new Notice("Python process error, check console for details")
-				console.error("Python process error:", error);
-				reject(error);
-			});
-
-			setTimeout(() => {
-				if (!this.isProcessReady) {
-					reject(new Error("Python process initialization timeout"));
-				}
-			}, 10000);
-		});
-	}
-
-	async sendCodeToPython(code: string): Promise<{
-		stdout: string;
-		stderr: string;
-		imageData?: string;
-	}> {
-		await this.initializePythonProcess();
-
-		return new Promise((resolve, reject) => {
-			this.executionQueue.push({code, resolve, reject});
-
-			if (!this.pythonProcess || !this.pythonProcess.stdin) {
-				reject(new Error("Python process not available"));
-				return;
-			}
-
-			if (code.includes('\n')) {
-				this.pythonProcess.stdin.write("EXEC:MULTILINE\n");
-				const lines = code.split('\n');
-				for (const line of lines) {
-					this.pythonProcess.stdin.write(line + "\n");
-				}
-				this.pythonProcess.stdin.write("END_CODE\n");
-			} else {
-				this.pythonProcess.stdin.write(`EXEC:${code}\n`);
-			}
-		});
 	}
 
 	async restartKernel(options: {silent?: boolean} = {}): Promise<void> {
-		const {silent = false} = options;
-
-		return new Promise((resolve, reject) => {
-			if (this.pythonProcess) {
-				const processToKill = this.pythonProcess;
-				processToKill.stdin?.write("EXIT\n");
-
-				// wait until it actually exits
-				processToKill.once('exit', (code, signal) => {
-					if (this.pythonProcess === processToKill) {
-						this.pythonProcess = null;
-						this.isProcessReady = false;
-						this.currentNotePath = null;
-					}
-
-					while (this.executionQueue.length > 0) {
-						const execution = this.executionQueue.shift();
-						if (execution) {
-							execution.reject(new Error("Kernel restarted"));
-						}
-					}
-
-					if (!silent) {
-						new Notice("Python kernel restarted");
-					}
-					resolve();
-				});
-
-				processToKill.once('error', (err) => {
-					reject(err);
-				});
-
-				processToKill.kill();
-			} else {
-				this.isProcessReady = false;
-				this.currentNotePath = null;
-				if (!silent) {
-					new Notice("Python kernel restarted");
-				}
-				resolve();
-			}
-		});
+		const activeFile = this.app.workspace.getActiveFile();
+		const notePath = activeFile instanceof TFile ? getAbsolutePath(activeFile) : this.currentNotePath;
+		const restarted = notePath ? await this.kernelService.restart(notePath) : false;
+		if (!options.silent) {
+			new Notice(restarted ? "Notebook kernel restarted" : "Notebook kernel has not been started yet");
+		}
 	}
 
-	cleanup(): void {
-		if (this.pythonProcess) {
-			this.pythonProcess.stdin?.write("EXIT\n");
-			this.pythonProcess.kill();
-			this.pythonProcess = null;
-		}
-		this.isProcessReady = false;
+	async interruptKernel(): Promise<void> {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!(activeFile instanceof TFile)) return;
+		const interrupted = await this.kernelService.interrupt(getAbsolutePath(activeFile));
+		new Notice(interrupted ? "Notebook kernel interrupted" : "Notebook kernel is not running");
+	}
+
+	async cleanup(): Promise<void> {
+		await this.kernelService.dispose();
+		this.currentNotePath = null;
 	}
 }

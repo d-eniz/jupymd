@@ -392,8 +392,8 @@ class JupyterKernelSelectorModal extends FuzzySuggestModal<KernelConnection> {
 
 	private async loadKernels() {
 		try {
-			this.kernels = (await (this.plugin as any).kernelService.listKernels())
-				.filter((kernel: KernelConnection) => !kernel.isManaged);
+			this.kernels = (await this.plugin.kernelService.listKernels())
+				.filter((kernel) => !kernel.isManaged);
 		} catch (error) {
 			let discoveryError = error;
 			if (!this.recoveryAttempted) {
@@ -401,8 +401,8 @@ class JupyterKernelSelectorModal extends FuzzySuggestModal<KernelConnection> {
 				const repaired = await this.offerToolingRepair();
 				if (repaired) {
 					try {
-						this.kernels = (await (this.plugin as any).kernelService.listKernels())
-							.filter((kernel: KernelConnection) => !kernel.isManaged);
+						this.kernels = (await this.plugin.kernelService.listKernels())
+							.filter((kernel) => !kernel.isManaged);
 						discoveryError = null;
 					} catch (retryError) {
 						discoveryError = retryError;
@@ -435,7 +435,7 @@ class JupyterKernelSelectorModal extends FuzzySuggestModal<KernelConnection> {
 
 		if (executableExists) {
 			if (!await installLibs(toolingPython, TOOLING_PACKAGES)) return false;
-			await (this.plugin as any).updateToolingPython(toolingPython);
+			await this.plugin.updateToolingPython(toolingPython);
 			return true;
 		}
 
@@ -446,7 +446,7 @@ class JupyterKernelSelectorModal extends FuzzySuggestModal<KernelConnection> {
 			TOOLING_PACKAGES
 		);
 		if (!repairedPython) return false;
-		await (this.plugin as any).updateToolingPython(repairedPython);
+		await this.plugin.updateToolingPython(repairedPython);
 		return true;
 	}
 }
@@ -562,7 +562,7 @@ export class NotebookKernelSelectorModal extends FuzzySuggestModal<KernelSourceO
 		const environmentLabel = ["bin", "scripts"].includes(path.basename(executableDir).toLowerCase())
 			? path.basename(path.dirname(executableDir))
 			: path.basename(pythonPath);
-		return (this.plugin as any).kernelService.preparePythonEnvironment(pythonPath, environmentLabel);
+		return this.plugin.kernelService.preparePythonEnvironment(pythonPath, environmentLabel);
 	}
 
 	private async hasIPyKernel(pythonPath: string): Promise<boolean> {
@@ -572,18 +572,5 @@ export class NotebookKernelSelectorModal extends FuzzySuggestModal<KernelSourceO
 		} catch {
 			return false;
 		}
-	}
-}
-
-export class KernelSelectorModal {
-	constructor(private app: App, private plugin: JupyMDPlugin) {}
-
-	open(): void {
-		void new PythonEnvironmentSelectorModal(
-			this.app,
-			this.plugin.settings.pythonInterpreter
-		).openAndGetValue().then(async (selectedPath) => {
-			if (selectedPath) await this.plugin.updateInterpreter(selectedPath);
-		});
 	}
 }
