@@ -1,7 +1,8 @@
 import {App, Notice, TFile, MarkdownView} from "obsidian";
-import {exec, execFile} from "child_process";
+import {exec} from "child_process";
 import {getAbsolutePath, isNotebookPaired, runJupytext} from "../utils/helpers";
 import {JupyMDPluginSettings} from "./types";
+import {KernelConnection} from "../kernels/types";
 import * as fs from "fs";
 
 export class FileSync {
@@ -141,7 +142,11 @@ export class FileSync {
 		}
 	}
 
-	async createNotebook(refreshView: boolean = true): Promise<boolean> {
+	async createNotebook(kernelOrRefresh: KernelConnection | boolean = true, refreshView: boolean = true): Promise<boolean> {
+		const kernel = typeof kernelOrRefresh === "boolean"
+			? ({displayName: "Python 3", language: "python", name: "python3"} as KernelConnection)
+			: kernelOrRefresh;
+		if (typeof kernelOrRefresh === "boolean") refreshView = kernelOrRefresh;
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) {
 			new Notice("No active note found.");
@@ -165,9 +170,9 @@ export class FileSync {
 
 			const metadata = JSON.stringify({
 				kernelspec: {
-					display_name: "Python 3",
-					language: "python",
-					name: "python3",
+					display_name: kernel.displayName,
+					language: kernel.language,
+					name: kernel.name,
 				},
 			});
 
