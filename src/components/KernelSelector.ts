@@ -35,6 +35,12 @@ type CreateVenvOption = {
 
 type PythonEnvironmentOption = PythonEnvironmentInfo | CustomPathOption | CreateVenvOption;
 
+type KernelSourceOption = {
+	id: "jupyter-kernels" | "python-environments";
+	displayName: string;
+	description: string;
+};
+
 function isCustomPathOption(option: PythonEnvironmentOption): option is CustomPathOption {
 	return "isCustomPath" in option;
 }
@@ -51,6 +57,19 @@ function createVenvOption(): CreateVenvOption {
 		isCreateVenv: true,
 	};
 }
+
+const KERNEL_SOURCES: KernelSourceOption[] = [
+	{
+		id: "jupyter-kernels",
+		displayName: "Jupyter kernels…",
+		description: "Installed kernelspecs",
+	},
+	{
+		id: "python-environments",
+		displayName: "Python environments…",
+		description: "Detected interpreters, virtual environments, and environment creation",
+	},
+];
 
 class ConfirmModal extends Modal {
 	private resolver: ((value: boolean) => void) | null = null;
@@ -276,6 +295,7 @@ export class PythonEnvironmentSelectorModal extends FuzzySuggestModal<PythonEnvi
 		}
 	}
 }
+
 class JupyterKernelSelectorModal extends FuzzySuggestModal<KernelConnection> {
 	private kernels: KernelConnection[] = [];
 	private resolver: ((kernel: KernelConnection | null) => void) | null = null;
@@ -382,7 +402,7 @@ class JupyterKernelSelectorModal extends FuzzySuggestModal<KernelConnection> {
 				if (repaired) {
 					try {
 						this.kernels = (await (this.plugin as any).kernelService.listKernels())
-				.filter((kernel: KernelConnection) => !kernel.isManaged);
+							.filter((kernel: KernelConnection) => !kernel.isManaged);
 						discoveryError = null;
 					} catch (retryError) {
 						discoveryError = retryError;
@@ -428,6 +448,130 @@ class JupyterKernelSelectorModal extends FuzzySuggestModal<KernelConnection> {
 		if (!repairedPython) return false;
 		await (this.plugin as any).updateToolingPython(repairedPython);
 		return true;
+	}
+}
+
+export class NotebookKernelSelectorModal extends FuzzySuggestModal<KernelSourceOption> {
+	private resolver: ((kernel: KernelConnection | null) => void) | null = null;
+	private resolved = false;
+	private isChoosing = false;
+
+	constructor(
+		app: App,
+		private plugin: JupyMDPlugin,
+		private currentKernelName?: string,
+		private preferredLanguage?: string
+	) {
+		super(app);
+		this.setPlaceholder("Select a kernel source…");
+		this.setInstructions([
+			{command: "↑↓", purpose: "navigate"},
+			{command: "↵", purpose: "select"},
+			{command: "esc", purpose: "dismiss"},
+		]);
+	}
+
+	openAndGetValue(): Promise<KernelConnection | null> {
+		return new Promise((resolve) => {
+			this.resolver = resolve;
+			this.open();
+		});
+	}
+
+	onClose() {
+		super.onClose();
+		if (this.isChoosing) return;
+		if (!this.resolved) this.resolver?.(null);
+		this.resolver = null;
+	}
+
+	selectSuggestion(value: FuzzyMatch<KernelSourceOption>, _evt: MouseEvent | KeyboardEvent): void {
+		this.isChoosing = true;
+		this.close();
+		void this.onChooseItem(value.item);
+	}
+
+	getItems(): KernelSourceOption[] {
+		return KERNEL_SOURCES;
+	}
+
+	getItemText(item: KernelSourceOption): string {
+		return `${item.displayName} ${item.description}`;
+	}
+
+	renderSuggestion(match: FuzzyMatch<KernelSourceOption>, el: HTMLElement) {
+		const item = match.item;
+		const wrapper = el.createDiv({cls: "kernel-suggestion"});
+		const topRow = wrapper.createDiv({cls: "kernel-suggestion-top"});
+		topRow.createSpan({cls: "kernel-suggestion-label", text: item.displayName});
+		wrapper.createDiv({cls: "kernel-suggestion-bottom"})
+			.createSpan({cls: "kernel-suggestion-path", text: item.description});
+	}
+
+	async onChooseItem(item: KernelSourceOption) {
+		let selectedKernel: KernelConnection | null = null;
+		try {
+			selectedKernel = item.id === "jupyter-kernels"
+				? await new JupyterKernelSelectorModal(
+					this.app,
+					this.plugin,
+					this.currentKernelName,
+					this.preferredLanguage
+				).openAndGetValue()
+				: await this.selectPythonEnvironmentKernel();
+		} catch (error) {
+			console.error("Failed to prepare notebook kernel:", error);
+			if ((error as Error).message !== "IPyKernel installation was cancelled.") {
+				new Notice("Failed to prepare notebook kernel. Check the console for details.");
+			}
+		}
+
+		if (!selectedKernel) {
+			this.isChoosing = false;
+			this.open();
+			return;
+		}
+
+		this.resolved = true;
+		this.resolver?.(selectedKernel);
+		this.resolver = null;
+		this.isChoosing = false;
+	}
+
+	private async selectPythonEnvironmentKernel(): Promise<KernelConnection | null> {
+		const pythonPath = await new PythonEnvironmentSelectorModal(
+			this.app,
+			this.plugin.settings.toolingPython
+		).openAndGetValue();
+		if (!pythonPath) return null;
+
+		if (!await this.hasIPyKernel(pythonPath)) {
+			const install = await new ConfirmModal(
+				this.app,
+				"Install IPyKernel",
+				"This Python environment needs IPyKernel to run as a Jupyter kernel.",
+				"Install"
+			).openAndGetValue();
+			if (!install) throw new Error("IPyKernel installation was cancelled.");
+			if (!await installLibs(pythonPath, "ipykernel")) {
+				throw new Error("Failed to install IPyKernel.");
+			}
+		}
+
+		const executableDir = path.dirname(pythonPath);
+		const environmentLabel = ["bin", "scripts"].includes(path.basename(executableDir).toLowerCase())
+			? path.basename(path.dirname(executableDir))
+			: path.basename(pythonPath);
+		return (this.plugin as any).kernelService.preparePythonEnvironment(pythonPath, environmentLabel);
+	}
+
+	private async hasIPyKernel(pythonPath: string): Promise<boolean> {
+		try {
+			await execFileAsync(pythonPath, ["-c", "import ipykernel"], {timeout: 5000});
+			return true;
+		} catch {
+			return false;
+		}
 	}
 }
 
