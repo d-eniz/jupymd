@@ -9,6 +9,10 @@
 	border: 1px solid var(--background-modifier-border-hover);
 }
 
+.markdown-preview-view .code-container {
+	margin-block: var(--p-spacing, 1em);
+}
+
 .code-top-bar {
 	display: flex;
 	justify-content: space-between;
