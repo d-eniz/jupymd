@@ -25,14 +25,11 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 	const [hasOutput, setHasOutput] = useState<boolean>(false);
 	const [isLoading, setIsLoading] = useState<boolean>(false);
 	const [isPaired, setIsPaired] = useState<boolean>(false);
-	const [blockCount, setBlockCount] = useState<number>(0);
-	const [currentIndex, setCurrentIndex] = useState<number>(index ?? 0);
+	const currentIndex = index ?? 0;
 	const [isRunMenuOpen, setIsRunMenuOpen] = useState<boolean>(false);
 	const [runMenuPosition, setRunMenuPosition] = useState<{ top: number; left: number } | null>(null);
 
 	const activeFile = plugin.app.workspace.getActiveFile();
-	const prevBlockCountRef = useRef<number>(0);
-	const prevCodeRef = useRef<string>(code);
 	const codeBlockRef = useRef<HTMLDivElement>(null);
 	const runMenuRef = useRef<HTMLDivElement>(null);
 	const runDropdownMenuRef = useRef<HTMLDivElement>(null);
@@ -79,47 +76,6 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 				to: editor.offsetToPos(codeEnd)
 			}, true);
 		}
-	};
-
-	const getCodeBlocks = async () => {
-		if (!path) return [];
-
-		try {
-			const ipynbPath = path.replace(/\.md$/, ".ipynb");
-			try {
-				await fs.access(ipynbPath);
-			} catch (e) {
-				return [];
-			}
-			const raw = await fs.readFile(ipynbPath, "utf-8");
-			const notebook = JSON.parse(raw);
-			return notebook.cells
-				.filter((c: { cell_type: string }) => c.cell_type === "code")
-				.map((cell: { source: string[] }) => cell.source.join("").trim());
-		} catch (err) {
-			console.error("Error reading notebook:", err);
-			return [];
-		}
-	};
-
-	const reindexBlock = async () => {
-		if (!path) return;
-
-		if (!await isNotebookPaired(plugin.app, activeFile)) {
-			return;
-		}
-
-		const codeBlocks = await getCodeBlocks();
-		const newBlockCount = codeBlocks.length;
-		setBlockCount(newBlockCount);
-
-		const newIndex = codeBlocks.findIndex((blockCode: string) => blockCode === code.trim());
-
-		if (newIndex !== -1 && (newIndex !== currentIndex || newBlockCount !== prevBlockCountRef.current)) {
-			setCurrentIndex(newIndex);
-		}
-
-		prevBlockCountRef.current = newBlockCount;
 	};
 
 	const renderOutputs = async () => {
@@ -254,7 +210,6 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 
 			await executor.executeCodeBlock(codeBlock, mode);
 
-			await reindexBlock();
 
 			setTimeout(async () => {
 				await renderOutputs();
@@ -328,23 +283,8 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 	};
 
 	useEffect(() => {
-		const interval = setInterval(() => {
-			if (code !== prevCodeRef.current || currentIndex === undefined || currentIndex >= blockCount) {
-				reindexBlock();
-				prevCodeRef.current = code;
-			}
-		}, 2000);
-
-		return () => clearInterval(interval);
-	}, [path, code, currentIndex, blockCount]);
-
-	useEffect(() => {
-		reindexBlock();
-	}, [path, code]);
-
-	useEffect(() => {
-		renderOutputs();
-	}, [currentIndex]);
+		void renderOutputs();
+	}, [path, currentIndex]);
 
 	useEffect(() => {
 		const checkPairing = async () => {
@@ -442,7 +382,6 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 				return;
 			}
 
-			void reindexBlock();
 			void renderOutputs();
 		};
 
@@ -451,7 +390,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 		return () => {
 			document.removeEventListener(OUTPUTS_UPDATED_EVENT, handleOutputsUpdated);
 		};
-	}, [path, code, currentIndex, blockCount, activeFile]);
+	}, [path, currentIndex, activeFile]);
 
 	return (
 		<div className="code-container">
