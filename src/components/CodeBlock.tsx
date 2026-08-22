@@ -20,6 +20,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 																index,
 																	sourceLineStart,
 																	language = "python",
+																	executionEnabled = true,
 																executor,
 																plugin,
 															}) => {
@@ -292,10 +293,12 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 	};
 
 	useEffect(() => {
-		void renderOutputs();
-	}, [path, currentIndex]);
+		if (executionEnabled) void renderOutputs();
+	}, [path, currentIndex, executionEnabled]);
 
 	useEffect(() => {
+		if (!executionEnabled) return;
+
 		const checkPairing = async () => {
 			if (activeFile) {
 				const paired = await isNotebookPaired(plugin.app, activeFile);
@@ -313,7 +316,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 		return () => {
 			plugin.app.metadataCache.offref(eventRef);
 		};
-	}, [activeFile]);
+	}, [activeFile, executionEnabled]);
 
 	useEffect(() => {
 		const handleDocumentMouseDown = (event: MouseEvent) => {
@@ -385,6 +388,8 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 	}, [isRunMenuOpen]);
 
 	useEffect(() => {
+		if (!executionEnabled) return;
+
 		const handleOutputsUpdated = (event: Event) => {
 			const customEvent = event as CustomEvent<{path?: string}>;
 			if (customEvent.detail?.path && customEvent.detail.path !== path) {
@@ -399,12 +404,12 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 		return () => {
 			document.removeEventListener(OUTPUTS_UPDATED_EVENT, handleOutputsUpdated);
 		};
-	}, [path, currentIndex, activeFile]);
+	}, [path, currentIndex, activeFile, executionEnabled]);
 
 	return (
 		<div className="code-container">
-			<div className="code-top-bar">
-				<div className="code-buttons">
+			<div className={`code-top-bar${executionEnabled ? "" : " code-top-bar-static"}`}>
+				{executionEnabled && <div className="code-buttons">
 					<div
 						className={`run-action-group${isRunMenuOpen ? " run-action-group-open" : ""}`}
 						ref={runMenuRef}
@@ -471,7 +476,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 					>
 						<ClearIcon className="icon grey-icon"/>
 					</button>
-				</div>
+				</div>}
 				<div className="code-lang-label">
 					{languageSupportRegistry.getDisplayName(language)}
 				</div>
@@ -484,7 +489,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 				/>
 			</div>
 
-			{isPaired && hasOutput && (
+			{executionEnabled && isPaired && hasOutput && (
 				<pre className="code-output">
                     {output}
                 </pre>
