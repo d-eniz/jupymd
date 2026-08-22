@@ -2,7 +2,7 @@ import * as React from "react";
 import {useState, useEffect, useLayoutEffect, JSX, useRef} from "react";
 import * as fs from 'fs/promises';
 import {createPortal} from "react-dom";
-import {getAbsolutePath, isNotebookPaired} from "../utils/helpers";
+import {getAbsolutePath, isNotebookPaired, runJupytext} from "../utils/helpers";
 import RunIcon from "../svg/RunIcon";
 import {ClearIcon} from "../svg/ClearIcon";
 import {LoadIcon} from "../svg/LoadIcon";
@@ -308,7 +308,9 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 			}
 
 			cells[currentIndex].outputs = [];
+			cells[currentIndex].execution_count = null;
 			await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
+			await runJupytext(plugin.settings.toolingPython, ["--sync", ipynbPath]);
 			setOutput("");
 			setHasOutput(false);
 			notifyOutputsUpdated();
