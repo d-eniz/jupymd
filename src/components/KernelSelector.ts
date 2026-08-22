@@ -373,6 +373,7 @@ class JupyterKernelSelectorModal extends FuzzySuggestModal<KernelConnection> {
 	private async loadKernels() {
 		try {
 			this.kernels = (await (this.plugin as any).kernelService.listKernels())
+				.filter((kernel: KernelConnection) => !kernel.isManaged);
 		} catch (error) {
 			let discoveryError = error;
 			if (!this.recoveryAttempted) {
@@ -381,6 +382,7 @@ class JupyterKernelSelectorModal extends FuzzySuggestModal<KernelConnection> {
 				if (repaired) {
 					try {
 						this.kernels = (await (this.plugin as any).kernelService.listKernels())
+				.filter((kernel: KernelConnection) => !kernel.isManaged);
 						discoveryError = null;
 					} catch (retryError) {
 						discoveryError = retryError;
