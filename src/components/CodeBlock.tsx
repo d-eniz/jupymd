@@ -14,6 +14,7 @@ import {HighlightedCodeBlock} from "./HighlightedCodeBlock";
 import {sanitizeHTMLToDom} from "obsidian";
 import {languageSupportRegistry} from "../languages/LanguageSupport";
 import {getEditorPositionForCodeOffset} from "../notebook/NotebookCellIndex";
+import {stripAnsiSequences} from "../utils/textOutput";
 
 export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 																code = "# No code provided",
@@ -143,7 +144,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 				for (const mime of ["text/markdown", "text/plain"]) {
 					if (data[mime] !== undefined) {
 						const rawText = Array.isArray(data[mime]) ? data[mime].join("") : String(data[mime]);
-						const text = rawText;
+						const text = stripAnsiSequences(rawText);
 						outputParts.push(<div className="text-output" key={keyPrefix}>{text}</div>);
 						return text.length > 0;
 					}
@@ -159,7 +160,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 				const out = cellOutputs[outputIndex];
 				if (out.output_type === "stream") {
 					const rawText = Array.isArray(out.text) ? out.text.join("") : out.text;
-					const text = rawText;
+					const text = stripAnsiSequences(rawText);
 					if (text.trim()) {
 						outputParts.push(<div className="text-output" key={`stream-${outputIndex}`}>{text}</div>);
 						hasActualOutput = true;
@@ -170,7 +171,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 					const rawTraceback = Array.isArray(out.traceback) && out.traceback.length
 						? out.traceback.join("\n")
 						: `${out.ename || "Error"}: ${out.evalue || ""}`;
-					const traceback = rawTraceback;
+					const traceback = stripAnsiSequences(rawTraceback);
 					outputParts.push(<div className="text-output error-output" key={`error-${outputIndex}`}>{traceback}</div>);
 					hasActualOutput = true;
 				}
