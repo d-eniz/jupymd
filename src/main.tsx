@@ -1,21 +1,24 @@
 import {Plugin, TFile, TAbstractFile, MarkdownView, Notice, setTooltip} from "obsidian";
+import {createRoot} from "react-dom/client";
+import * as fs from "fs";
 import {JupyMDSettingTab} from "./components/Settings";
 import {CodeExecutor} from "./components/CodeExecutor";
 import {FileSync} from "./components/FileSync";
 import {NotebookKernelSelectorModal} from "./components/KernelSelector";
 import {DEFAULT_SETTINGS, JupyMDPluginSettings} from "./components/types";
 import {registerCommands} from "./commands";
-import {createRoot} from "react-dom/client";
-import {PythonCodeBlock} from "./components/CodeBlock";
+import {NotebookCodeBlock} from "./components/CodeBlock";
+import {HighlightedCodeBlock} from "./components/HighlightedCodeBlock";
 import {getAbsolutePath, isNotebookPaired, runJupytext} from "./utils/helpers";
-import {formatKernelLabel, getInterpreterInfo} from "./utils/kernelDiscovery";
 import {getDefaultPythonPath} from "./utils/pythonPathUtils";
-import * as fs from "fs";
-import * as path from "path";
 import {ManagedKernelSpecStore} from "./kernels/ManagedKernelSpecStore";
 import {JupyterBridgeClient} from "./bridge/JupyterBridgeClient";
 import {NotebookKernelService} from "./kernels/NotebookKernelService";
 import {KernelConnection} from "./kernels/types";
+import {languageSupportRegistry} from "./languages/LanguageSupport";
+import {getExecutableCellIndex} from "./notebook/NotebookCellIndex";
+import {formatKernelLabel, getInterpreterInfo} from "./utils/kernelDiscovery";
+import * as path from "path";
 
 export default class JupyMDPlugin extends Plugin {
 	settings: JupyMDPluginSettings;
@@ -24,9 +27,9 @@ export default class JupyMDPlugin extends Plugin {
 	kernelService: NotebookKernelService;
 	private bridge: JupyterBridgeClient;
 	private managedKernelSpecs: ManagedKernelSpecStore;
-	currentNotePath: string | null = null;
-	private kernelStatusBarItem : HTMLElement;
-	private settingTab : JupyMDSettingTab;
+	private kernelStatusBarItem: HTMLElement;
+	private settingTab: JupyMDSettingTab;
+	private registeredFenceLanguages = new Set<string>();
 
 	async onload() {
 		await this.loadSettings();
@@ -48,141 +51,15 @@ export default class JupyMDPlugin extends Plugin {
 		});
 
 		registerCommands(this);
-
 		this.settingTab = new JupyMDSettingTab(this.app, this);
 		this.addSettingTab(this.settingTab);
 
-		this.registerEvent(
-			this.app.vault.on("modify", async (file: TAbstractFile) => {
-				if (file instanceof TFile && this.settings.autoSync) {
-					await this.fileSync.handleSync(file);
-				}
-			})
-		);
-
-		this.registerEvent(
-			this.app.vault.on("delete", async (file: TAbstractFile) => {
-				if (file instanceof TFile && file.extension === "md") {
-					try {
-						const mdPath = getAbsolutePath(file);
-						const ipynbPath = mdPath.replace(/\.md$/, ".ipynb");
-						if (fs.existsSync(ipynbPath)) {
-							fs.unlinkSync(ipynbPath);
-						}
-
-					} catch (e) {
-						console.error("Failed to delete paired notebook:", e);
-					}
-				}
-			})
-		);
-
-		this.registerEvent(
-			this.app.vault.on("rename", async (file: TAbstractFile, oldPath: string) => {
-				if (file instanceof TFile && file.extension === "md") {
-					try {
-						const newMdPath = getAbsolutePath(file);
-						const oldMdPath = newMdPath.substring(0, newMdPath.length - file.path.length) + oldPath;
-
-						const oldIpynbPath = oldMdPath.replace(/\.md$/, ".ipynb");
-						const newIpynbPath = newMdPath.replace(/\.md$/, ".ipynb");
-
-						if (fs.existsSync(oldIpynbPath)) {
-							fs.renameSync(oldIpynbPath, newIpynbPath);
-
-							this.app.workspace.getLeavesOfType("markdown").forEach((leaf) => {
-								const view = leaf.view;
-								if (view instanceof MarkdownView && view.file?.path === file.path) {
-									(leaf as any).rebuildView();
-								}
-							});
-						}
-					} catch (e) {
-						console.error("Failed to rename paired notebook:", e);
-					}
-				}
-			})
-		);
-
-		this.registerEvent(
-			this.app.workspace.on("file-open", () => {
-				void this.updateStatusBar();
-			})
-		);
-
-		this.registerEvent(
-			this.app.metadataCache.on("changed", (file) => {
-				const activeFile = this.app.workspace.getActiveFile();
-				if (activeFile && activeFile.path === file.path) {
-					void this.updateStatusBar();
-				}
-			})
-		);
-
+		this.registerVaultEvents();
 		if (this.settings.enableCodeBlocks) {
-			this.registerMarkdownCodeBlockProcessor(
-				"python",
-				async (source, el, ctx) => {
-					el.empty();
-					const reactRoot = document.createElement("div");
-					el.appendChild(reactRoot);
-
-					const activeFile = this.app.vault.getFileByPath(ctx.sourcePath);
-
-					let index = 0;
-					if (activeFile instanceof TFile) {
-						const filePath = getAbsolutePath(activeFile);
-						const fileContent = await this.app.vault.read(activeFile);
-						const lines = fileContent.split("\n");
-						let blockCount = 0;
-						let foundCurrentBlock = false;
-
-						const sectionInfo = ctx.getSectionInfo(el);
-						if (!sectionInfo) {
-							const root = createRoot(reactRoot);
-							root.render(
-								<PythonCodeBlock
-									code={source}
-									path={filePath}
-									index={0}
-									executor={this.executor}
-									plugin={this}
-								/>
-							);
-							return;
-						}
-
-						for (let i = 0; i < lines.length; i++) {
-							const line = lines[i].trim();
-							if (line.startsWith("```python")) {
-								if (i < sectionInfo.lineStart) {
-									blockCount++;
-								} else if (i === sectionInfo.lineStart) {
-									foundCurrentBlock = true;
-									break;
-								}
-							}
-						}
-
-						if (foundCurrentBlock) {
-							index = blockCount;
-							createRoot(reactRoot).render(
-								<PythonCodeBlock
-									code={source}
-									path={filePath}
-									index={index}
-									executor={this.executor}
-									plugin={this}
-								/>
-							);
-						}
-					} else {
-						createRoot(reactRoot).render(
-							<PythonCodeBlock code={source}/>
-						);
-					}
-				}
-			);
+			for (const language of languageSupportRegistry.builtInFenceLanguages) {
+				this.registerNotebookCodeBlockProcessor(language);
+			}
+			void this.registerDiscoveredKernelLanguages();
 		}
 	}
 
@@ -209,6 +86,7 @@ export default class JupyMDPlugin extends Plugin {
 		await this.bridge.setToolingPython(newPath);
 		this.fileSync = new FileSync(this.app, newPath, this.settings);
 		this.settingTab?.display();
+		void this.registerDiscoveredKernelLanguages();
 		new Notice(`Jupyter tooling environment set to: ${newPath}`);
 	}
 
@@ -226,6 +104,7 @@ export default class JupyMDPlugin extends Plugin {
 
 		const kernel = await new NotebookKernelSelectorModal(this.app, this, undefined, preferredLanguage).openAndGetValue();
 		if (!kernel) return false;
+		if (this.settings.enableCodeBlocks) this.registerNotebookCodeBlockProcessor(kernel.language);
 		const created = await this.fileSync.createNotebook(kernel, refreshView);
 		if (created) await this.updateStatusBar();
 		return created;
@@ -269,6 +148,7 @@ export default class JupyMDPlugin extends Plugin {
 
 		await this.kernelService.setKernelForNote(targetPath, selected);
 		await runJupytext(this.settings.toolingPython, ["--sync", ipynbPath]);
+		if (this.settings.enableCodeBlocks) this.registerNotebookCodeBlockProcessor(selected.language);
 		await this.updateStatusBar();
 		new Notice(`Notebook kernel set to: ${selected.displayName}`);
 		return selected;
@@ -278,7 +158,123 @@ export default class JupyMDPlugin extends Plugin {
 		void this.selectKernelForNote();
 	}
 
+	private registerVaultEvents(): void {
+		this.registerEvent(this.app.vault.on("modify", async (file: TAbstractFile) => {
+			if (file instanceof TFile && this.settings.autoSync) {
+				await this.fileSync.handleSync(file);
+			}
+		}));
 
+		this.registerEvent(this.app.vault.on("delete", async (file: TAbstractFile) => {
+			if (!(file instanceof TFile) || file.extension !== "md") return;
+			try {
+				const mdPath = getAbsolutePath(file);
+				await this.kernelService.shutdown(mdPath).catch(() => undefined);
+				const ipynbPath = mdPath.replace(/\.md$/, ".ipynb");
+				if (fs.existsSync(ipynbPath)) fs.unlinkSync(ipynbPath);
+			} catch (error) {
+				console.error("Failed to delete paired notebook:", error);
+			}
+		}));
+
+		this.registerEvent(this.app.vault.on("rename", async (file: TAbstractFile, oldPath: string) => {
+			if (!(file instanceof TFile) || file.extension !== "md") return;
+			try {
+				const newMdPath = getAbsolutePath(file);
+				const oldMdPath = newMdPath.substring(0, newMdPath.length - file.path.length) + oldPath;
+				await this.kernelService.shutdown(oldMdPath).catch(() => undefined);
+				const oldIpynbPath = oldMdPath.replace(/\.md$/, ".ipynb");
+				const newIpynbPath = newMdPath.replace(/\.md$/, ".ipynb");
+				if (fs.existsSync(oldIpynbPath)) {
+					fs.renameSync(oldIpynbPath, newIpynbPath);
+					this.app.workspace.getLeavesOfType("markdown").forEach((leaf) => {
+						const view = leaf.view;
+						if (view instanceof MarkdownView && view.file?.path === file.path) {
+							(leaf as any).rebuildView();
+						}
+					});
+				}
+			} catch (error) {
+				console.error("Failed to rename paired notebook:", error);
+			}
+		}));
+
+		this.registerEvent(this.app.workspace.on("file-open", () => void this.updateStatusBar()));
+		this.registerEvent(this.app.metadataCache.on("changed", (file) => {
+			const activeFile = this.app.workspace.getActiveFile();
+			if (activeFile && activeFile.path === file.path) void this.updateStatusBar();
+		}));
+	}
+
+	private async registerDiscoveredKernelLanguages(): Promise<void> {
+		try {
+			const kernels = await this.kernelService.listKernels();
+			for (const kernel of kernels) {
+				const language = kernel.language.trim().toLowerCase();
+				if (language) this.registerNotebookCodeBlockProcessor(language);
+			}
+		} catch (error) {
+			console.error("Could not register discovered kernel languages:", error);
+		}
+	}
+
+	private registerNotebookCodeBlockProcessor(language: string): void {
+		const normalizedLanguage = language.trim().toLowerCase();
+		if (!normalizedLanguage || this.registeredFenceLanguages.has(normalizedLanguage)) return;
+		this.registeredFenceLanguages.add(normalizedLanguage);
+
+		this.registerMarkdownCodeBlockProcessor(normalizedLanguage, async (source, el, ctx) => {
+			const sectionInfo = ctx.getSectionInfo(el);
+			el.empty();
+			const reactRoot = document.createElement("div");
+			el.appendChild(reactRoot);
+			const sourceFile = this.app.vault.getFileByPath(ctx.sourcePath);
+			if (!(sourceFile instanceof TFile)) {
+				createRoot(reactRoot).render(<HighlightedCodeBlock code={source} language={normalizedLanguage}/>);
+				return;
+			}
+
+			const filePath = getAbsolutePath(sourceFile);
+			let selectedKernel: KernelConnection | null = null;
+			if (await isNotebookPaired(this.app, sourceFile)) {
+				selectedKernel = await this.kernelService.resolveKernelForNote(filePath).catch(() => null);
+				if (selectedKernel && !languageSupportRegistry.matches(normalizedLanguage, selectedKernel.language)) {
+					createRoot(reactRoot).render(
+						<NotebookCodeBlock
+							code={source}
+							path={filePath}
+							sourceLineStart={sectionInfo?.lineStart}
+							language={normalizedLanguage}
+							executionEnabled={false}
+							plugin={this}
+						/>
+					);
+					return;
+				}
+			}
+			const fileContent = await this.app.vault.read(sourceFile);
+			const kernelLanguage = selectedKernel?.language || normalizedLanguage;
+			const index = sectionInfo
+				? getExecutableCellIndex(fileContent, sectionInfo.lineStart, kernelLanguage)
+				: null;
+			if (!sectionInfo || index === null) {
+				createRoot(reactRoot).render(<HighlightedCodeBlock code={source} language={normalizedLanguage}/>);
+				return;
+			}
+
+			createRoot(reactRoot).render(
+				<NotebookCodeBlock
+					code={source}
+					path={filePath}
+					index={index}
+					sourceLineStart={sectionInfo.lineStart}
+					language={normalizedLanguage}
+					executor={this.executor}
+					plugin={this}
+				/>
+			);
+		});
+	}
 	private async formatInterpreterForStatusBar(interpreter: string): Promise<string> {
 		const info = await getInterpreterInfo(this.app, interpreter);
 		if (info) {

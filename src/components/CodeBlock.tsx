@@ -9,13 +9,15 @@ import {LoadIcon} from "../svg/LoadIcon";
 import RunAboveIcon from "../svg/RunAboveIcon";
 import RunBelowIcon from "../svg/RunBelowIcon";
 import ChevronDownIcon from "../svg/ChevronDownIcon";
-import {CodeBlock, CodeExecutionMode, OUTPUTS_UPDATED_EVENT, PythonBlockProps} from "./types";
+import {CodeBlock, CodeExecutionMode, OUTPUTS_UPDATED_EVENT, NotebookCodeBlockProps} from "./types";
 import {HighlightedCodeBlock} from "./HighlightedCodeBlock";
+import {languageSupportRegistry} from "../languages/LanguageSupport";
 
-export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
+export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 																code = "# No code provided",
 																path,
 																index,
+																	language = "python",
 																executor,
 																plugin,
 															}) => {
@@ -241,7 +243,8 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 
 			const codeBlock: CodeBlock = {
 				code: code,
-				cellIndex: currentIndex
+				cellIndex: currentIndex,
+				language
 			};
 
 			if (!activeFile) {
@@ -522,7 +525,7 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 					</button>
 				</div>
 				<div className="code-lang-label">
-					Python
+					{languageSupportRegistry.getDisplayName(language)}
 				</div>
 			</div>
 
@@ -533,6 +536,7 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 			>
 				<HighlightedCodeBlock
 					code={code}
+					language={language}
 				/>
 			</div>
 
