@@ -276,7 +276,158 @@ export class PythonEnvironmentSelectorModal extends FuzzySuggestModal<PythonEnvi
 		}
 	}
 }
+class JupyterKernelSelectorModal extends FuzzySuggestModal<KernelConnection> {
+	private kernels: KernelConnection[] = [];
+	private resolver: ((kernel: KernelConnection | null) => void) | null = null;
+	private resolved = false;
+	private isChoosing = false;
+	private recoveryAttempted = false;
 
+	constructor(
+		app: App,
+		private plugin: JupyMDPlugin,
+		private currentKernelName?: string,
+		private preferredLanguage?: string
+	) {
+		super(app);
+		this.setPlaceholder("Select an installed Jupyter kernel…");
+		this.setInstructions([
+			{command: "↑↓", purpose: "navigate"},
+			{command: "↵", purpose: "select"},
+			{command: "esc", purpose: "back"},
+		]);
+	}
+
+	openAndGetValue(): Promise<KernelConnection | null> {
+		return new Promise((resolve) => {
+			this.resolver = resolve;
+			this.open();
+		});
+	}
+
+	onOpen() {
+		super.onOpen();
+		this.emptyStateText = "No installed Jupyter kernels found.";
+		void this.loadKernels();
+	}
+
+	onClose() {
+		super.onClose();
+		if (this.isChoosing) return;
+		if (!this.resolved) this.resolver?.(null);
+		this.resolver = null;
+	}
+
+	selectSuggestion(value: FuzzyMatch<KernelConnection>, evt: MouseEvent | KeyboardEvent): void {
+		this.isChoosing = true;
+		super.selectSuggestion(value, evt);
+	}
+
+	getItems(): KernelConnection[] {
+		return this.kernels;
+	}
+
+	getSuggestions(query: string): FuzzyMatch<KernelConnection>[] {
+		const suggestions = super.getSuggestions(query);
+		if (query.trim()) return suggestions;
+
+		const current = this.currentKernelName
+			? suggestions.find((suggestion) => suggestion.item.name.toLowerCase() === this.currentKernelName?.toLowerCase())
+			: undefined;
+		let ordered = current
+			? [current, ...suggestions.filter((suggestion) => suggestion.item !== current.item)]
+			: suggestions;
+		if (!current && this.preferredLanguage) {
+			const preferred = this.preferredLanguage.toLowerCase();
+			ordered = [
+				...ordered.filter((suggestion) => languageSupportRegistry.matches(preferred, suggestion.item.language)),
+				...ordered.filter((suggestion) => !languageSupportRegistry.matches(preferred, suggestion.item.language)),
+			];
+		}
+		return ordered;
+	}
+
+	getItemText(item: KernelConnection): string {
+		return `${item.displayName} ${item.name} ${item.language} ${item.resourceDir}`;
+	}
+
+	renderSuggestion(match: FuzzyMatch<KernelConnection>, el: HTMLElement) {
+		const item = match.item;
+		const wrapper = el.createDiv({cls: "kernel-suggestion"});
+		const topRow = wrapper.createDiv({cls: "kernel-suggestion-top"});
+		topRow.createSpan({cls: "kernel-suggestion-label", text: item.displayName});
+		const badgeText = item.isManaged ? "managed" : item.language || "kernel";
+		topRow.createSpan({cls: "kernel-suggestion-badge kernel-badge-system", text: badgeText});
+		const bottomRow = wrapper.createDiv({cls: "kernel-suggestion-bottom"});
+		bottomRow.createSpan({cls: "kernel-suggestion-version", text: item.name});
+		bottomRow.createSpan({cls: "kernel-suggestion-path", text: item.resourceDir});
+	}
+
+	onChooseItem(item: KernelConnection) {
+		this.resolved = true;
+		this.resolver?.(item);
+		this.resolver = null;
+		this.isChoosing = false;
+	}
+
+	private async loadKernels() {
+		try {
+			this.kernels = (await (this.plugin as any).kernelService.listKernels())
+		} catch (error) {
+			let discoveryError = error;
+			if (!this.recoveryAttempted) {
+				this.recoveryAttempted = true;
+				const repaired = await this.offerToolingRepair();
+				if (repaired) {
+					try {
+						this.kernels = (await (this.plugin as any).kernelService.listKernels())
+						discoveryError = null;
+					} catch (retryError) {
+						discoveryError = retryError;
+					}
+				}
+			}
+
+			if (discoveryError) {
+				console.error("Jupyter kernel discovery failed:", discoveryError);
+				new Notice("Jupyter tooling is unavailable. Repair it here or select another tooling environment in settings.");
+				this.emptyStateText = "Jupyter tooling is unavailable. Press Esc to choose another source.";
+				this.kernels = [];
+			}
+		} finally {
+			// @ts-ignore - internal Obsidian API
+			this.updateSuggestions();
+		}
+	}
+
+	private async offerToolingRepair(): Promise<boolean> {
+		const toolingPython = this.plugin.settings.toolingPython;
+		const executableExists = await validatePythonPath(toolingPython);
+		const title = executableExists ? "Install Jupyter tooling" : "Repair Jupyter tooling";
+		const description = executableExists
+			? `The tooling environment at ${toolingPython} cannot start the Jupyter bridge. Install Jupytext and Jupyter Client into it?`
+			: `The configured tooling Python no longer exists: ${toolingPython}. Recreate the vault-local .jupymd environment with Jupytext and Jupyter Client?`;
+		const confirmed = await new ConfirmModal(this.app, title, description, executableExists ? "Install" : "Repair")
+			.openAndGetValue();
+		if (!confirmed) return false;
+
+		if (executableExists) {
+			if (!await installLibs(toolingPython, TOOLING_PACKAGES)) return false;
+			await (this.plugin as any).updateToolingPython(toolingPython);
+			return true;
+		}
+
+		const repairedPython = await runQuickSetup(
+			this.app,
+			undefined,
+			".jupymd",
+			TOOLING_PACKAGES
+		);
+		if (!repairedPython) return false;
+		await (this.plugin as any).updateToolingPython(repairedPython);
+		return true;
+	}
+}
 
 export class KernelSelectorModal {
 	constructor(private app: App, private plugin: JupyMDPlugin) {}
