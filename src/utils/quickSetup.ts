@@ -4,21 +4,20 @@ import * as fs from "fs/promises";
 import {execFile} from "child_process";
 import {promisify} from "util";
 import { installLibs } from "./helpers";
-import JupyMDPlugin from "../main";
 import {getDefaultPythonPath} from "./pythonPathUtils";
 
 const execFileAsync = promisify(execFile);
 
 export async function runQuickSetup(
 	app: App,
-	plugin: JupyMDPlugin,
 	basePythonPath?: string,
-	envNameInput?: string
-): Promise<boolean> {
+	envNameInput?: string,
+	packages = "ipykernel"
+): Promise<string | null> {
 	const adapter = app.vault.adapter as any;
 	if (!adapter.getBasePath) {
 		new Notice("Quick setup is only supported on local file systems.");
-		return false;
+		return null;
 	}
 
 	const basePath = adapter.getBasePath();
@@ -30,7 +29,6 @@ export async function runQuickSetup(
 
 	try {
 		const basePython = basePythonPath?.trim()
-			|| plugin.settings.pythonInterpreter
 			|| getDefaultPythonPath();
 
 		await execFileAsync(basePython, ["-m", "venv", venvPath]);
@@ -45,16 +43,18 @@ export async function runQuickSetup(
 			throw new Error("Could not locate Python in the newly created virtual environment.");
 		}
 
-		new Notice("Installing libraries...");
-		await installLibs(venvPythonPath, "jupytext matplotlib")
-
-		await plugin.updateInterpreter(venvPythonPath);
+		if (packages.trim()) {
+			new Notice("Installing libraries...");
+			if (!await installLibs(venvPythonPath, packages)) {
+				throw new Error(`Failed to install required packages: ${packages}`);
+			}
+		}
 
 		new Notice(`Quick setup complete! Virtual environment '${envName}' created successfully.`);
-		return true;
+		return venvPythonPath;
 	} catch (error: any) {
 		console.error("Quick setup failed:", error);
 		new Notice(`Quick setup failed: ${error.message || error}`);
-		return false;
+		return null;
 	}
 }

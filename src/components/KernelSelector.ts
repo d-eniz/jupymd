@@ -194,16 +194,17 @@ export class KernelSelectorModal extends FuzzySuggestModal<KernelOption> {
 				return;
 			}
 
-			const success = await runQuickSetup(
+			const createdPython = await runQuickSetup(
 				this.app,
-				this.plugin,
 				config.basePythonPath,
-				config.envName
+				config.envName,
+				"jupytext matplotlib"
 			);
-			if (!success) {
+			if (!createdPython) {
 				return;
 			}
 
+			await this.plugin.updateInterpreter(createdPython);
 			this.kernels = await discoverKernels(this.app);
 			this.close();
 			return;
