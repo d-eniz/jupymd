@@ -1,5 +1,8 @@
 import {App, FuzzyMatch, FuzzySuggestModal, Modal, Notice, Setting} from "obsidian";
-import {discoverKernels, KernelInfo} from "../utils/kernelDiscovery";
+import {
+	discoverPythonEnvironments,
+	PythonEnvironmentInfo,
+} from "../utils/pythonEnvironmentDiscovery";
 import {validatePythonPath} from "../utils/pythonPathUtils";
 
 export type CreateVenvResult = {
@@ -15,7 +18,7 @@ type CustomPathOption = {
 	isCustomPath: true;
 };
 
-type CreateVenvInterpreterOption = KernelInfo | CustomPathOption;
+type CreateVenvInterpreterOption = PythonEnvironmentInfo | CustomPathOption;
 
 function isCustomPathOption(option: CreateVenvInterpreterOption): option is CustomPathOption {
 	return "isCustomPath" in option;
@@ -118,7 +121,7 @@ class VenvNameModal extends Modal {
 export class CreateVenvModal extends FuzzySuggestModal<CreateVenvInterpreterOption> {
 	private readonly initialPythonPath: string;
 	private readonly initialEnvName = ".jupymd";
-	private availableKernels: KernelInfo[] = [];
+	private availableKernels: PythonEnvironmentInfo[] = [];
 	private isChoosingInterpreter = false;
 	private resolver: ((result: CreateVenvResult | null) => void) | null = null;
 
@@ -285,7 +288,7 @@ export class CreateVenvModal extends FuzzySuggestModal<CreateVenvInterpreterOpti
 
 	private async loadInterpreterOptions() {
 		try {
-			this.availableKernels = (await discoverKernels(this.app))
+			this.availableKernels = (await discoverPythonEnvironments(this.app))
 				.filter((kernel) => kernel.type === "system");
 		} catch (error) {
 			console.error("Failed to discover interpreters for venv creation:", error);
