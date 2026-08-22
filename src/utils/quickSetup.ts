@@ -1,13 +1,13 @@
 import {App, Notice, Platform} from "obsidian";
 import * as path from "path";
 import * as fs from "fs/promises";
-import {exec} from "child_process";
+import {execFile} from "child_process";
 import {promisify} from "util";
 import { installLibs } from "./helpers";
 import JupyMDPlugin from "../main";
 import {getDefaultPythonPath} from "./pythonPathUtils";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export async function runQuickSetup(
 	app: App,
@@ -33,7 +33,7 @@ export async function runQuickSetup(
 			|| plugin.settings.pythonInterpreter
 			|| getDefaultPythonPath();
 
-		await execAsync(`"${basePython}" -m venv "${venvPath}"`);
+		await execFileAsync(basePython, ["-m", "venv", venvPath]);
 
 		const venvPythonPath = Platform.isWin
 			? path.join(venvPath, "Scripts", "python.exe")

@@ -1,10 +1,10 @@
-import {exec} from "child_process";
+import {execFile} from "child_process";
 
 export async function validatePythonPath(pythonPath?: string): Promise<boolean> {
     if (!pythonPath?.trim()) return false;
 
     return new Promise((resolve) => {
-        exec(`"${pythonPath.trim()}" --version`, { timeout: 3000 }, (error) => {
+        execFile(pythonPath.trim(), ["--version"], {timeout: 3000}, (error) => {
             resolve(!error);
         });
     });
