@@ -240,19 +240,41 @@ export class CodeExecutor {
 		if (codeBlocks.length === 0) return;
 
 		try {
-			const raw = await fs.readFile(ipynbPath, "utf-8");
-			const notebook = JSON.parse(raw);
-			const notebookCodeCells = notebook.cells.filter((cell: {cell_type: string}) => cell.cell_type === "code");
+			const readNotebook = async () => {
+				const raw = await fs.readFile(ipynbPath, "utf-8");
+				const notebook = JSON.parse(raw);
+				const codeCells = notebook.cells.filter((cell: {cell_type: string}) => cell.cell_type === "code");
+				return {notebook, codeCells};
+			};
+			const cellsMatchMarkdown = (codeCells: any[]) => codeBlocks.every((codeBlock) => {
+				const cell = codeCells[codeBlock.cellIndex];
+				if (!cell) return false;
+				const cellSource = Array.isArray(cell.source) ? cell.source.join("") : cell.source || "";
+				return cellSource.trim() === codeBlock.code.trim();
+			});
+
+			let {notebook, codeCells: notebookCodeCells} = await readNotebook();
+			if (!cellsMatchMarkdown(notebookCodeCells)) {
+				// Markdown is the source being executed. Force that direction instead of
+				// using --sync, whose timestamp selection could copy a stale notebook
+				// back over the note. --update retains outputs in the existing notebook.
+				await runJupytext(this.plugin.settings.toolingPython, [
+					"--update",
+					"--to", "ipynb",
+					notePath,
+				]);
+				({notebook, codeCells: notebookCodeCells} = await readNotebook());
+			}
 
 			for (const codeBlock of codeBlocks) {
 				const cell = notebookCodeCells[codeBlock.cellIndex];
 				if (!cell) {
-					throw new Error(`Cell with index ${codeBlock.cellIndex} was not found after synchronization.`);
+					throw new Error(`Cell with index ${codeBlock.cellIndex} was not found after synchronizing Markdown.`);
 				}
 				const cellSource = Array.isArray(cell.source) ? cell.source.join("") : cell.source || "";
 				if (cellSource.trim() !== codeBlock.code.trim()) {
 					throw new Error(
-						`Cell ${codeBlock.cellIndex + 1} no longer matches the Markdown source. Synchronize before running it.`
+						`Cell ${codeBlock.cellIndex + 1} still does not match the Markdown source after synchronization.`
 					);
 				}
 
