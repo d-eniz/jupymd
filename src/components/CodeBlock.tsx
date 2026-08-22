@@ -9,7 +9,7 @@ import {LoadIcon} from "../svg/LoadIcon";
 import RunAboveIcon from "../svg/RunAboveIcon";
 import RunBelowIcon from "../svg/RunBelowIcon";
 import ChevronDownIcon from "../svg/ChevronDownIcon";
-import {CodeBlock, CodeExecutionMode, OUTPUTS_UPDATED_EVENT, NotebookCodeBlockProps} from "./types";
+import {CodeBlock, CodeExecutionMode, NotebookCodeBlockProps, OUTPUTS_UPDATED_EVENT} from "./types";
 import {HighlightedCodeBlock} from "./HighlightedCodeBlock";
 import {sanitizeHTMLToDom} from "obsidian";
 import {languageSupportRegistry} from "../languages/LanguageSupport";
@@ -17,22 +17,22 @@ import {getEditorPositionForCodeOffset} from "../notebook/NotebookCellIndex";
 import {stripAnsiSequences} from "../utils/textOutput";
 
 export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
-																code = "# No code provided",
-																path,
-																index,
-																	sourceLineStart,
-																	language = "python",
-																	executionEnabled = true,
-																executor,
+																		code = "# No code provided",
+																			path,
+															index,
+															sourceLineStart,
+															language = "python",
+															executionEnabled = true,
+															executor,
 																plugin,
 															}) => {
 	const [output, setOutput] = useState<string | JSX.Element>("");
 	const [hasOutput, setHasOutput] = useState<boolean>(false);
 	const [isLoading, setIsLoading] = useState<boolean>(false);
 	const [isPaired, setIsPaired] = useState<boolean>(false);
-	const currentIndex = index ?? 0;
 	const [isRunMenuOpen, setIsRunMenuOpen] = useState<boolean>(false);
 	const [runMenuPosition, setRunMenuPosition] = useState<{ top: number; left: number } | null>(null);
+	const currentIndex = index ?? 0;
 
 	const activeFile = plugin.app.workspace.getActiveFile();
 	const runMenuRef = useRef<HTMLDivElement>(null);
@@ -191,8 +191,6 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 		}
 	};
 
-
-
 	const waitForSyncUnblocked = async (): Promise<boolean> => {
 		const startTime = Date.now();
 
@@ -235,7 +233,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 			const codeBlock: CodeBlock = {
 				code: code,
 				cellIndex: currentIndex,
-				language
+				language,
 			};
 
 			if (!activeFile) {
@@ -244,7 +242,6 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 			}
 
 			await executor.executeCodeBlock(codeBlock, mode);
-
 
 			setTimeout(async () => {
 				await renderOutputs();
@@ -512,7 +509,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 				</div>
 			</div>
 
-			<div className="code-source" onClick={handleCodeClick}>
+				<div className="code-source" onClick={handleCodeClick}>
 				<HighlightedCodeBlock
 					code={code}
 					language={language}
@@ -522,7 +519,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 			{executionEnabled && isPaired && hasOutput && (
 				<div className="code-output">
                     {output}
-                </div>
+				</div>
 			)}
 		</div>
 	);

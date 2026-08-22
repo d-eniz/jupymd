@@ -47,6 +47,8 @@
 	font-family: 'Inter', sans-serif;
 	color: var(--text-muted);
 	font-size: 0.7em;
+	font-weight: 500;
+	letter-spacing: 0.01em;
 	padding: 0.5em;
 }
 
@@ -89,7 +91,6 @@
 	border-radius: 3px;
 	background-color: var(--background-primary) !important;
 }
-
 
 .icon-button {
 	box-shadow: none !important;
@@ -232,6 +233,37 @@
 	box-shadow: none;
 }
 
+.code-source {
+	background-color: var(--code-background);
+	overflow: hidden;
+}
+
+.code-source pre {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	margin: 0 !important;
+	border-radius: 0;
+}
+
+.code-source,
+.code-source pre,
+.code-source code {
+	user-select: text;
+}
+
+@media print {
+	.code-container {
+		margin: 0 0 1em !important;
+	}
+
+	.code-source,
+	.code-source pre {
+		-webkit-print-color-adjust: exact;
+		print-color-adjust: exact;
+	}
+}
+
 .kernel-status {
 	cursor: pointer;
 	font-size: var(--font-ui-small);
@@ -284,8 +316,7 @@
 .kernel-badge-venv { background-color: rgba(80, 160, 255, 0.18); color: #5090e0; }
 .kernel-badge-system { background-color: rgba(140, 120, 220, 0.18); color: #8070c0; }
 .kernel-badge-custom { background-color: rgba(230, 150, 60, 0.16); color: #c67a18; }
-.kernel-badge-pyenv,
-.kernel-badge-create { background-color: rgba(80, 190, 140, 0.18); color: #3d9a68; }
+.kernel-badge-pyenv { background-color: rgba(80, 190, 140, 0.18); color: #3d9a68; }
 
 .jupymd-interpreter-display,
 .kernel-suggestion-path {
@@ -301,10 +332,4 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-
-.code-source,
-.code-source pre,
-.code-source code {
-	user-select: text;
 }
