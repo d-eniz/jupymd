@@ -11,6 +11,7 @@ import RunBelowIcon from "../svg/RunBelowIcon";
 import ChevronDownIcon from "../svg/ChevronDownIcon";
 import {CodeBlock, CodeExecutionMode, OUTPUTS_UPDATED_EVENT, NotebookCodeBlockProps} from "./types";
 import {HighlightedCodeBlock} from "./HighlightedCodeBlock";
+import {sanitizeHTMLToDom} from "obsidian";
 import {languageSupportRegistry} from "../languages/LanguageSupport";
 import {getEditorPositionForCodeOffset} from "../notebook/NotebookCellIndex";
 
@@ -116,46 +117,67 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 			}
 
 			const cellOutputs = cells[currentIndex].outputs;
-			let outputText = "";
-			const outputImages: JSX.Element[] = [];
+			const outputParts: JSX.Element[] = [];
 			let hasActualOutput = false;
+			const addMimeBundle = (data: Record<string, any>, keyPrefix: string) => {
+				if (data["text/html"]) {
+					const html = Array.isArray(data["text/html"]) ? data["text/html"].join("") : String(data["text/html"]);
+					const holder = document.createElement("div");
+					holder.appendChild(sanitizeHTMLToDom(html));
+					outputParts.push(<div key={keyPrefix} dangerouslySetInnerHTML={{__html: holder.innerHTML}}/>);
+					return true;
+				}
+				if (data["image/svg+xml"]) {
+					const svg = Array.isArray(data["image/svg+xml"]) ? data["image/svg+xml"].join("") : String(data["image/svg+xml"]);
+					const holder = document.createElement("div");
+					holder.appendChild(sanitizeHTMLToDom(svg));
+					outputParts.push(<div key={keyPrefix} dangerouslySetInnerHTML={{__html: holder.innerHTML}}/>);
+					return true;
+				}
+				for (const mime of ["image/png", "image/jpeg"]) {
+					if (data[mime]) {
+						outputParts.push(<img key={keyPrefix} src={`data:${mime};base64,${data[mime]}`} alt="Cell output"/>);
+						return true;
+					}
+				}
+				for (const mime of ["text/markdown", "text/plain"]) {
+					if (data[mime] !== undefined) {
+						const rawText = Array.isArray(data[mime]) ? data[mime].join("") : String(data[mime]);
+						const text = rawText;
+						outputParts.push(<div className="text-output" key={keyPrefix}>{text}</div>);
+						return text.length > 0;
+					}
+				}
+				if (data["application/json"] !== undefined) {
+					outputParts.push(<div className="text-output" key={keyPrefix}>{JSON.stringify(data["application/json"], null, 2)}</div>);
+					return true;
+				}
+				return false;
+			};
 
-			for (const out of cellOutputs) {
+			for (let outputIndex = 0; outputIndex < cellOutputs.length; outputIndex++) {
+				const out = cellOutputs[outputIndex];
 				if (out.output_type === "stream") {
-					const text = Array.isArray(out.text) ? out.text.join("") : out.text;
+					const rawText = Array.isArray(out.text) ? out.text.join("") : out.text;
+					const text = rawText;
 					if (text.trim()) {
-						outputText += text;
+						outputParts.push(<div className="text-output" key={`stream-${outputIndex}`}>{text}</div>);
 						hasActualOutput = true;
 					}
-				} else if (out.output_type === "execute_result" && out.data && out.data["text/plain"]) {
-					const text = Array.isArray(out.data["text/plain"])
-						? out.data["text/plain"].join("")
-						: out.data["text/plain"];
-					if (text.trim()) {
-						outputText += text;
-						hasActualOutput = true;
-					}
-				} else if (out.output_type === "display_data" && out.data) {
-					if (out.data["image/png"]) {
-						const imageData = out.data["image/png"];
-						outputImages.push(
-							<img
-								key={outputImages.length}
-								src={`data:image/png;base64,${imageData}`}
-								alt="Cell output"
-								style={{maxWidth: '100%'}}
-							/>
-						);
-						hasActualOutput = true;
-					}
+				} else if ((out.output_type === "execute_result" || out.output_type === "display_data") && out.data) {
+					hasActualOutput = addMimeBundle(out.data, `${out.output_type}-${outputIndex}`) || hasActualOutput;
+				} else if (out.output_type === "error") {
+					const rawTraceback = Array.isArray(out.traceback) && out.traceback.length
+						? out.traceback.join("\n")
+						: `${out.ename || "Error"}: ${out.evalue || ""}`;
+					const traceback = rawTraceback;
+					outputParts.push(<div className="text-output error-output" key={`error-${outputIndex}`}>{traceback}</div>);
+					hasActualOutput = true;
 				}
 			}
 
 			const outputContent = (
-				<>
-					{outputText && <div className="text-output">{outputText}</div>}
-					{outputImages}
-				</>
+				<>{outputParts}</>
 			);
 
 			setOutput(outputContent);
@@ -167,6 +189,8 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 			setHasOutput(true);
 		}
 	};
+
+
 
 	const waitForSyncUnblocked = async (): Promise<boolean> => {
 		const startTime = Date.now();
@@ -490,9 +514,9 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 			</div>
 
 			{executionEnabled && isPaired && hasOutput && (
-				<pre className="code-output">
+				<div className="code-output">
                     {output}
-                </pre>
+                </div>
 			)}
 		</div>
 	);

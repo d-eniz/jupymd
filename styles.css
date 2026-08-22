@@ -52,18 +52,44 @@
 
 .code-output {
 	font-size: 0.9em;
+	line-height: 1.45;
 	font-family: var(--font-monospace), monospace !important;
-    background-color: var(--background-primary) !important;
+	background-color: var(--background-primary) !important;
 	border: none !important;
+	border-top: 1px solid var(--background-modifier-border) !important;
+	margin: 0;
+	padding: 0.75em 1em 0.9em;
+	overflow-x: auto;
+}
+
+.text-output {
+	margin: 0;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.code-output > :first-child {
+	margin-top: 0;
+}
+
+.code-output > :last-child {
+	margin-bottom: 0;
+}
+
+.error-output {
+	color: var(--text-error);
 }
 
 .code-output img {
+	display: block;
+	max-width: 100%;
 	max-height: 500px !important;
 	margin: 0.5em 0;
 	border: none;
 	border-radius: 3px;
 	background-color: var(--background-primary) !important;
 }
+
 
 .icon-button {
 	box-shadow: none !important;
