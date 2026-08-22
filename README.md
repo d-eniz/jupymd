@@ -11,7 +11,7 @@ Enables Jupyter notebook functionality in Obsidian. Make markdown files behave l
 
 With JupyMD you can:
 
-- Run Python code
+- Run code
 - Create plots with `matplotlib`
 - Conduct data analysis with `pandas` dataframes
 - Build machine learning models with `sklearn` and `pytorch`
@@ -31,9 +31,18 @@ With JupyMD you can:
 
 ## Features
 
+JupyMD is designed to be a feature rich Jupyter notebook editor inside of Obsidian, similar to VSCode's Jupyter notebook functionality and Jupyter Lab. Some of its features include:
+
+- **Multiple Programming Languages** – JupyMD supports:
+    - Python
+    - Julia
+    - R
+    - JavaScript/TypeScript
+    - Bash
+    - Rust
 - **Notebook Conversion**
-    - Convert existing notes in Obsidian to `.ipynb` files via Jupytext
-    - Convert existing Jupyter notebooks (`.ipynb`) to Markdown notes (`.md`) via Jupytext
+    - Convert existing notes in Obsidian to Jupyter notebooks
+    - Convert existing Jupyter notebooks to Markdown notes
 - **Bidirectional Updates** – Changes in Obsidian or Jupyter automatically sync between `.md` and `.ipynb` files
 - **Execute Code** – Run code blocks in Obsidian with output captured below each block, regardless of viewing mode
 - **Persistent Execution Environment** – Variables and imports defined in one code block are remembered by the following code blocks
@@ -43,37 +52,37 @@ With JupyMD you can:
 
 ## Prerequisites
 
-- [Python](https://www.python.org/downloads/)
-- [Jupytext](https://github.com/mwouts/jupytext)
-- [Matplotlib](https://matplotlib.org/)
+Python is necessary as a tooling environment to invoke Jupytext and Jupyter Client, even if you don't plan to use Python in a Jupyter notebook.
 
-Jupytext and Matplotlib can be installed on configured interpreters within the plugin settings.
+- [Python](https://www.python.org/downloads/)
+
+The following dependencies can be installed natively through the plugin settings on your set tooling environment:
+
+- [Jupytext](https://github.com/mwouts/jupytext)
+- [Jupyter Client](https://github.com/jupyter/jupyter_client)
+
+JupyMD natively prompts an installation for [IPython](https://ipython.org/) when a Python interpreter is selected. For further language support, you will need to manually install [Jupyter kernels listed here](https://github.com/jupyter/jupyter/wiki/Jupyter-kernels) along with your supported programming language of choice. Installed Jupyter kernels are automatically detected by JupyMD.
 
 ## Getting started
 
 Download the plugin through the [Obsidian community plugin browser](obsidian://show-plugin?id=jupymd) and enable it.
 
-### Interpreter configuration
-
-It is highly recommended to use a [virtual environment](https://docs.python.org/3/library/venv.html) for an interpreter. It is easy to set up a virtual environment through the interpreter selector within the plugin settings.
-
-JupyMD natively supports [pyenv](https://github.com/pyenv/pyenv) environments and custom interpreters.
-
-To install libraries to a specified interpreter, use the following command line prompt:
-
-```bash
-<interpreter> -m pip install <package>
-```
-
-You can copy the path to your current interpreter by shift + clicking on the interpreter name on the status bar.
+To set up JupyMD, configure a Python tooling environment from the settings. This will list Python installations in your system for selection. It is highly recommended to use a virtual environment for a tooling environment. This can be set up easily through the set up modal in the settings.
 
 ### To convert a note to a Jupyter notebook
 
-Your note will be transformed into a Jupyter notebook when you run a cell through the custom code blocks. This will create an `.ipynb` file with the same file name as the current note on the file directory, and sync its contents automatically to the `.ipynb` file. You may choose to ignore the created `.ipynb` file completely, as its functionality will be mirrored in Obsidian.
+You can transform your note into a Jupyter notebook in two ways:
 
-To manually convert a note, you may run the following command:
+- Pressing "run cell" on a code block
+- Running the "JupyMD: Create notebook from note" command
 
-> `JupyMD: Create Jupyter notebook from note`
+This will:
+
+- Prompt you to select a Jupyter kernel for the Juypter notebook
+- Create an `.ipynb` file with the same file name as the current note on the file directory
+- Continuously sync the contents of the markdown file to the `.ipynb` file
+
+You may choose to ignore the created `.ipynb` file completely, as its functionality will be mirrored in Obsidian.
 
 ### To convert a Jupyter notebook to a note
 
@@ -85,7 +94,7 @@ This will create a Markdown note (`.md`) with the same file name as the notebook
 
 ## Security & Privacy Notice
 
-JupyMD may access directories outside your Obsidian vault to detect available Python interpreters.
+JupyMD may access directories outside your Obsidian vault to detect available kernels and interpreters.
 
 This includes:
 
