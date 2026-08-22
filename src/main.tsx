@@ -17,8 +17,7 @@ import {NotebookKernelService} from "./kernels/NotebookKernelService";
 import {KernelConnection} from "./kernels/types";
 import {languageSupportRegistry} from "./languages/LanguageSupport";
 import {getExecutableCellIndex} from "./notebook/NotebookCellIndex";
-import {formatKernelLabel, getInterpreterInfo} from "./utils/kernelDiscovery";
-import * as path from "path";
+import {getKernelStatusLabel} from "./languages/KernelStatusLabel";
 
 export default class JupyMDPlugin extends Plugin {
 	settings: JupyMDPluginSettings;
@@ -30,6 +29,7 @@ export default class JupyMDPlugin extends Plugin {
 	private kernelStatusBarItem: HTMLElement;
 	private settingTab: JupyMDSettingTab;
 	private registeredFenceLanguages = new Set<string>();
+	private kernelStatusLabels = new Map<string, Promise<string>>();
 
 	async onload() {
 		await this.loadSettings();
@@ -85,6 +85,7 @@ export default class JupyMDPlugin extends Plugin {
 		await this.saveSettings();
 		await this.bridge.setToolingPython(newPath);
 		this.fileSync = new FileSync(this.app, newPath, this.settings);
+		this.kernelStatusLabels.clear();
 		this.settingTab?.display();
 		void this.registerDiscoveredKernelLanguages();
 		new Notice(`Jupyter tooling environment set to: ${newPath}`);
@@ -275,36 +276,51 @@ export default class JupyMDPlugin extends Plugin {
 			);
 		});
 	}
-	private async formatInterpreterForStatusBar(interpreter: string): Promise<string> {
-		const info = await getInterpreterInfo(this.app, interpreter);
-		if (info) {
-			return formatKernelLabel(info.label, info.version);
-		}
-
-		return path.basename(interpreter) || interpreter;
-	}
 
 	private async updateStatusBar(): Promise<void> {
 		if (!this.kernelStatusBarItem) return;
-
 		const activeFile = this.app.workspace.getActiveFile();
-		if (!(activeFile instanceof TFile)) {
+		if (!(activeFile instanceof TFile) || !await isNotebookPaired(this.app, activeFile)) {
 			this.kernelStatusBarItem.hide();
 			return;
 		}
 
-		const isPaired = await isNotebookPaired(this.app, activeFile);
-		if (!isPaired) {
-			this.kernelStatusBarItem.hide();
-			return;
+		const notePath = getAbsolutePath(activeFile);
+		let kernel: KernelConnection | null = null;
+		try {
+			kernel = await this.kernelService.resolveKernelForNote(notePath);
+		} catch (error) {
+			console.error("Failed to update notebook kernel status:", error);
 		}
 
-		const interpreter = this.settings.pythonInterpreter ? this.settings.pythonInterpreter : "No interpreter";
-		const statusText = await this.formatInterpreterForStatusBar(interpreter);
 		this.kernelStatusBarItem.show();
-		this.kernelStatusBarItem.setText(statusText);
-		setTooltip(this.kernelStatusBarItem, `Current Python interpreter: ${interpreter}\nClick to change interpreter\nShift + click to copy path`, {placement: "top"});
-		
+		this.kernelStatusBarItem.setText(
+			kernel ? await this.formatKernelStatusLabel(kernel) : "Select kernel"
+		);
+		setTooltip(
+			this.kernelStatusBarItem,
+			kernel
+				? `Notebook kernel: ${kernel.name}\nLanguage: ${kernel.language}\nClick to change kernel\nShift + click to copy ${kernel.language.toLowerCase() === "python" ? "interpreter path" : "kernel executable"}`
+				: "No usable kernel selected\nClick to select a notebook kernel",
+			{placement: "top"}
+		);
+	}
+
+	private async formatKernelStatusLabel(kernel: KernelConnection): Promise<string> {
+		const cacheKey = `${kernel.name}\0${kernel.resourceDir}\0${kernel.spec.argv.join("\0")}`;
+		let label = this.kernelStatusLabels.get(cacheKey);
+		if (!label) {
+			label = getKernelStatusLabel(this.app, kernel);
+			this.kernelStatusLabels.set(cacheKey, label);
+		}
+
+		try {
+			return await label;
+		} catch (error) {
+			this.kernelStatusLabels.delete(cacheKey);
+			console.error("Failed to resolve kernel status label:", error);
+			return kernel.displayName;
+		}
 	}
 
 	private async handleKernelStatusBarClick(event: MouseEvent): Promise<void> {
@@ -313,19 +329,28 @@ export default class JupyMDPlugin extends Plugin {
 			return;
 		}
 
-		const interpreter = this.settings.pythonInterpreter;
-		if (!interpreter) {
-			new Notice("No interpreter path to copy");
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!(activeFile instanceof TFile)) return;
+		const kernel = await this.kernelService.resolveKernelForNote(getAbsolutePath(activeFile));
+		if (!kernel) {
+			new Notice("No notebook kernel runtime path to copy");
+			return;
+		}
+
+		const runtimePath = kernel.interpreterPath || kernel.spec.argv[0];
+		if (!runtimePath) {
+			new Notice("No interpreter or kernel executable is available to copy");
 			return;
 		}
 
 		try {
-			await navigator.clipboard.writeText(interpreter);
-			new Notice("Interpreter path copied");
+			await navigator.clipboard.writeText(runtimePath);
+			new Notice(kernel.language.toLowerCase() === "python"
+				? "Python interpreter path copied"
+				: "Kernel executable copied");
 		} catch (error) {
-			console.error("Failed to copy interpreter path:", error);
-			new Notice("Failed to copy interpreter path");
+			console.error("Failed to copy kernel runtime path:", error);
+			new Notice("Failed to copy kernel runtime path");
 		}
 	}
-
 }
