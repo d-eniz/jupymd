@@ -3,7 +3,7 @@ export type JupyMDPluginSettings = {
 	bidirectionalSync: boolean;
 	autoConvertToNotebookOnRun: boolean;
 	toolingPython: string;
-	pythonInterpreter: string;
+	pythonInterpreter?: string;
 	notebookEditorCommand: string;
 	enableCodeBlocks: boolean;
 }
@@ -13,7 +13,6 @@ export const DEFAULT_SETTINGS: JupyMDPluginSettings = {
 	bidirectionalSync: false,
 	autoConvertToNotebookOnRun: true,
 	toolingPython: "",
-	pythonInterpreter: "",
 	notebookEditorCommand: "jupyter-lab",
 	enableCodeBlocks: true,
 };
