@@ -272,3 +272,9 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+
+.code-source,
+.code-source pre,
+.code-source code {
+	user-select: text;
+}

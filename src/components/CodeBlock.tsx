@@ -2,7 +2,7 @@ import * as React from "react";
 import {useState, useEffect, useLayoutEffect, JSX, useRef} from "react";
 import * as fs from 'fs/promises';
 import {createPortal} from "react-dom";
-import {isNotebookPaired} from "../utils/helpers";
+import {getAbsolutePath, isNotebookPaired} from "../utils/helpers";
 import RunIcon from "../svg/RunIcon";
 import {ClearIcon} from "../svg/ClearIcon";
 import {LoadIcon} from "../svg/LoadIcon";
@@ -12,11 +12,13 @@ import ChevronDownIcon from "../svg/ChevronDownIcon";
 import {CodeBlock, CodeExecutionMode, OUTPUTS_UPDATED_EVENT, NotebookCodeBlockProps} from "./types";
 import {HighlightedCodeBlock} from "./HighlightedCodeBlock";
 import {languageSupportRegistry} from "../languages/LanguageSupport";
+import {getEditorPositionForCodeOffset} from "../notebook/NotebookCellIndex";
 
 export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 																code = "# No code provided",
 																path,
 																index,
+																	sourceLineStart,
 																	language = "python",
 																executor,
 																plugin,
@@ -30,7 +32,6 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 	const [runMenuPosition, setRunMenuPosition] = useState<{ top: number; left: number } | null>(null);
 
 	const activeFile = plugin.app.workspace.getActiveFile();
-	const codeBlockRef = useRef<HTMLDivElement>(null);
 	const runMenuRef = useRef<HTMLDivElement>(null);
 	const runDropdownMenuRef = useRef<HTMLDivElement>(null);
 
@@ -45,37 +46,45 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 		}));
 	};
 
-	const handleEditClick = async () => {
-		if (!activeFile || !plugin.app.workspace.activeEditor) return;
+	const getCodeOffsetAtPoint = (root: HTMLElement, clientX: number, clientY: number): number => {
+		const documentWithCaret = document as Document & {
+			caretPositionFromPoint?: (x: number, y: number) => {offsetNode: Node; offset: number} | null;
+			caretRangeFromPoint?: (x: number, y: number) => Range | null;
+		};
+		const caretPosition = documentWithCaret.caretPositionFromPoint?.(clientX, clientY);
+		const caretRange = caretPosition ? null : documentWithCaret.caretRangeFromPoint?.(clientX, clientY);
+		const node = caretPosition?.offsetNode || caretRange?.startContainer;
+		const nodeOffset = caretPosition?.offset ?? caretRange?.startOffset;
+		if (!node || nodeOffset === undefined || !root.contains(node)) return 0;
 
-		const editor = plugin.app.workspace.activeEditor.editor;
-		if (!editor) return;
-
-		const content = editor.getValue();
-
-		const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-		const codeBlockPattern = new RegExp(`\`\`\`python\\n${escapedCode}(\\n\`\`\`|$)`, 'gm');
-		const match = codeBlockPattern.exec(content);
-
-		if (match) {
-			const startPos = match.index;
-			const endPos = startPos + match[0].length;
-
-			const codeStart = startPos + "```python\n".length;
-			const codeEnd = endPos - (match[0].endsWith("```") ? "\n```".length : 0);
-
-			editor.setSelection(
-				editor.offsetToPos(codeStart),
-				editor.offsetToPos(codeEnd)
-			);
-			editor.focus();
-
-			editor.scrollIntoView({
-				from: editor.offsetToPos(codeStart),
-				to: editor.offsetToPos(codeEnd)
-			}, true);
+		try {
+			const range = document.createRange();
+			range.selectNodeContents(root);
+			range.setEnd(node, nodeOffset);
+			return range.toString().length;
+		} catch {
+			return 0;
 		}
+	};
+
+	const handleCodeClick = (event: React.MouseEvent<HTMLDivElement>) => {
+		if (sourceLineStart === undefined || !path) return;
+		const selection = window.getSelection();
+		if (selection && !selection.isCollapsed) return;
+
+		const currentFile = plugin.app.workspace.getActiveFile();
+		const editor = plugin.app.workspace.activeEditor?.editor;
+		if (!currentFile || !editor || getAbsolutePath(currentFile) !== path) return;
+
+		const codeElement = event.currentTarget.querySelector("code");
+		const offset = codeElement
+			? getCodeOffsetAtPoint(codeElement, event.clientX, event.clientY)
+			: 0;
+		const position = getEditorPositionForCodeOffset(code, sourceLineStart, offset);
+		event.preventDefault();
+		event.stopPropagation();
+		editor.setCursor(position);
+		editor.focus();
 	};
 
 	const renderOutputs = async () => {
@@ -468,11 +477,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 				</div>
 			</div>
 
-			<div
-				ref={codeBlockRef}
-				onClick={handleEditClick}
-				style={{cursor: 'text'}}
-			>
+			<div className="code-source" onClick={handleCodeClick}>
 				<HighlightedCodeBlock
 					code={code}
 					language={language}
