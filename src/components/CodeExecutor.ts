@@ -1,7 +1,14 @@
 import JupyMDPlugin from "../main";
 import {App, Notice, TFile} from "obsidian";
 import {getAbsolutePath, isNotebookPaired, runJupytext} from "../utils/helpers";
-import {CodeBlock, CodeExecutionMode, OUTPUTS_UPDATED_EVENT} from "./types";
+import {
+	CodeBlock,
+	CodeExecutionMode,
+	isCodeCell,
+	NotebookCell,
+	OUTPUTS_UPDATED_EVENT,
+	parseNotebook,
+} from "./types";
 import {NotebookKernelService} from "../kernels/NotebookKernelService";
 import {KernelExecutionResult} from "../kernels/types";
 import {languageSupportRegistry} from "../languages/LanguageSupport";
@@ -110,11 +117,11 @@ export class CodeExecutor {
 		kernelLanguage?: string
 	): Promise<CodeBlock[]> {
 		const raw = await fs.readFile(ipynbPath, "utf-8");
-		const notebook = JSON.parse(raw);
+		const notebook = parseNotebook(raw);
 
 		const codeBlocks: CodeBlock[] = notebook.cells
-			.filter((cell: {cell_type: string}) => cell.cell_type === "code")
-			.map((cell: {source: string[] | string}, cellIndex: number) => ({
+			.filter(isCodeCell)
+			.map((cell, cellIndex: number) => ({
 				code: Array.isArray(cell.source) ? cell.source.join("") : cell.source ?? "",
 				cellIndex,
 			}));
@@ -131,7 +138,7 @@ export class CodeExecutor {
 		return codeBlocks.filter((codeBlock) => codeBlock.cellIndex === cellIndex);
 	}
 
-	private applyExecutionResultToCell(cell: any, result: KernelExecutionResult) {
+	private applyExecutionResultToCell(cell: NotebookCell, result: KernelExecutionResult): void {
 		cell.outputs = result.outputs;
 		cell.execution_count = result.executionCount;
 		cell.metadata = cell.metadata || {};
@@ -203,8 +210,8 @@ export class CodeExecutor {
 
 		try {
 			const raw = await fs.readFile(notebookContext.ipynbPath, "utf-8");
-			const notebook = JSON.parse(raw);
-			const codeCells = notebook.cells.filter((cell: {cell_type: string}) => cell.cell_type === "code");
+			const notebook = parseNotebook(raw);
+			const codeCells = notebook.cells.filter(isCodeCell);
 
 			for (const cell of codeCells) {
 				cell.outputs = [];
@@ -242,11 +249,11 @@ export class CodeExecutor {
 		try {
 			const readNotebook = async () => {
 				const raw = await fs.readFile(ipynbPath, "utf-8");
-				const notebook = JSON.parse(raw);
-				const codeCells = notebook.cells.filter((cell: {cell_type: string}) => cell.cell_type === "code");
+				const notebook = parseNotebook(raw);
+				const codeCells = notebook.cells.filter(isCodeCell);
 				return {notebook, codeCells};
 			};
-			const cellsMatchMarkdown = (codeCells: any[]) => codeBlocks.every((codeBlock) => {
+			const cellsMatchMarkdown = (codeCells: NotebookCell[]) => codeBlocks.every((codeBlock) => {
 				const cell = codeCells[codeBlock.cellIndex];
 				if (!cell) return false;
 				const cellSource = Array.isArray(cell.source) ? cell.source.join("") : cell.source || "";

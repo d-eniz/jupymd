@@ -5,6 +5,7 @@ import {promisify} from "util";
 import {JupyterBridgeClient} from "../bridge/JupyterBridgeClient";
 import {KernelConnection, KernelExecutionResult} from "./types";
 import {ManagedKernelSpecStore} from "./ManagedKernelSpecStore";
+import {parseNotebook} from "../components/types";
 
 const execFileAsync = promisify(execFile);
 
@@ -20,9 +21,9 @@ export class NotebookKernelService {
 
 	async resolveKernelForNote(notePath: string): Promise<KernelConnection | null> {
 		const ipynbPath = notePath.replace(/\.md$/, ".ipynb");
-		let notebook: any;
+		let notebook;
 		try {
-			notebook = JSON.parse(await fs.readFile(ipynbPath, "utf-8"));
+			notebook = parseNotebook(await fs.readFile(ipynbPath, "utf-8"));
 		} catch {
 			return null;
 		}
@@ -36,7 +37,7 @@ export class NotebookKernelService {
 
 	async setKernelForNote(notePath: string, kernel: KernelConnection): Promise<void> {
 		const ipynbPath = notePath.replace(/\.md$/, ".ipynb");
-		const notebook = JSON.parse(await fs.readFile(ipynbPath, "utf-8"));
+		const notebook = parseNotebook(await fs.readFile(ipynbPath, "utf-8"));
 		notebook.metadata = notebook.metadata || {};
 		notebook.metadata.kernelspec = {
 			display_name: kernel.displayName,

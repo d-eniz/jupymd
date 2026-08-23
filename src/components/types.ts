@@ -1,3 +1,6 @@
+import type JupyMDPlugin from "../main";
+import type {CodeExecutor} from "./CodeExecutor";
+
 export type JupyMDPluginSettings = {
 	autoSync: boolean;
 	bidirectionalSync: boolean;
@@ -34,6 +37,48 @@ export type NotebookCodeBlockProps = {
 	sourceLineStart?: number;
 	language?: string;
 	executionEnabled?: boolean;
-	executor?: any;
-	plugin?: any;
+	executor?: CodeExecutor;
+	plugin: JupyMDPlugin;
+}
+
+export type NotebookOutput = {
+	output_type: string;
+	text?: string | string[];
+	data?: Record<string, unknown>;
+	traceback?: string[];
+	ename?: string;
+	evalue?: string;
+};
+
+export type NotebookCell = {
+	cell_type: string;
+	source?: string | string[];
+	outputs?: NotebookOutput[];
+	execution_count?: number | null;
+	metadata?: Record<string, unknown> & {
+		jupyter?: {is_executing: boolean};
+	};
+};
+
+export type NotebookData = {
+	cells: NotebookCell[];
+	metadata?: Record<string, unknown> & {
+		kernelspec?: {
+			display_name?: string;
+			language?: string;
+			name?: string;
+		};
+	};
+};
+
+export function parseNotebook(raw: string): NotebookData {
+	const value: unknown = JSON.parse(raw);
+	if (!value || typeof value !== "object" || !Array.isArray((value as {cells?: unknown}).cells)) {
+		throw new Error("Invalid Jupyter notebook: missing cells array");
+	}
+	return value as NotebookData;
+}
+
+export function isCodeCell(cell: NotebookCell): boolean {
+	return cell.cell_type === "code";
 }
