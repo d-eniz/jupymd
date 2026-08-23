@@ -9,7 +9,14 @@ import {LoadIcon} from "../svg/LoadIcon";
 import RunAboveIcon from "../svg/RunAboveIcon";
 import RunBelowIcon from "../svg/RunBelowIcon";
 import ChevronDownIcon from "../svg/ChevronDownIcon";
-import {CodeBlock, CodeExecutionMode, NotebookCodeBlockProps, OUTPUTS_UPDATED_EVENT} from "./types";
+import {
+	CodeBlock,
+	CodeExecutionMode,
+	isCodeCell,
+	NotebookCodeBlockProps,
+	OUTPUTS_UPDATED_EVENT,
+	parseNotebook,
+} from "./types";
 import {HighlightedCodeBlock} from "./HighlightedCodeBlock";
 import {sanitizeHTMLToDom} from "obsidian";
 import {languageSupportRegistry} from "../languages/LanguageSupport";
@@ -52,12 +59,10 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 	const getCodeOffsetAtPoint = (root: HTMLElement, clientX: number, clientY: number): number => {
 		const documentWithCaret = document as Document & {
 			caretPositionFromPoint?: (x: number, y: number) => {offsetNode: Node; offset: number} | null;
-			caretRangeFromPoint?: (x: number, y: number) => Range | null;
 		};
 		const caretPosition = documentWithCaret.caretPositionFromPoint?.(clientX, clientY);
-		const caretRange = caretPosition ? null : documentWithCaret.caretRangeFromPoint?.(clientX, clientY);
-		const node = caretPosition?.offsetNode || caretRange?.startContainer;
-		const nodeOffset = caretPosition?.offset ?? caretRange?.startOffset;
+		const node = caretPosition?.offsetNode;
+		const nodeOffset = caretPosition?.offset;
 		if (!node || nodeOffset === undefined || !root.contains(node)) return 0;
 
 		try {
@@ -91,7 +96,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 	};
 
 	const renderOutputs = async () => {
-		if (!executor || !path || currentIndex === undefined) return;
+		if (!executor || !path || !activeFile || currentIndex === undefined) return;
 
 		try {
 			if (!await isNotebookPaired(plugin.app, activeFile)) {
@@ -103,13 +108,13 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 			const ipynbPath = path.replace(/\.md$/, ".ipynb");
 			try {
 				await fs.access(ipynbPath);
-			} catch (e) {
+			} catch {
 				return;
 			}
 			
 			const raw = await fs.readFile(ipynbPath, "utf-8");
-			const notebook = JSON.parse(raw);
-			const cells = notebook.cells.filter((c: { cell_type: string }) => c.cell_type === "code");
+			const notebook = parseNotebook(raw);
+			const cells = notebook.cells.filter(isCodeCell);
 
 			if (cells.length <= currentIndex || !cells[currentIndex] || !cells[currentIndex].outputs) {
 				setOutput("");
@@ -117,33 +122,34 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 				return;
 			}
 
-			const cellOutputs = cells[currentIndex].outputs;
+			const cellOutputs = cells[currentIndex].outputs ?? [];
 			const outputParts: JSX.Element[] = [];
 			let hasActualOutput = false;
-			const addMimeBundle = (data: Record<string, any>, keyPrefix: string) => {
+			const addMimeBundle = (data: Record<string, unknown>, keyPrefix: string) => {
 				if (data["text/html"]) {
 					const html = Array.isArray(data["text/html"]) ? data["text/html"].join("") : String(data["text/html"]);
-					const holder = document.createElement("div");
+					const holder = createDiv();
 					holder.appendChild(sanitizeHTMLToDom(html));
 					outputParts.push(<div key={keyPrefix} dangerouslySetInnerHTML={{__html: holder.innerHTML}}/>);
 					return true;
 				}
 				if (data["image/svg+xml"]) {
 					const svg = Array.isArray(data["image/svg+xml"]) ? data["image/svg+xml"].join("") : String(data["image/svg+xml"]);
-					const holder = document.createElement("div");
+					const holder = createDiv();
 					holder.appendChild(sanitizeHTMLToDom(svg));
 					outputParts.push(<div key={keyPrefix} dangerouslySetInnerHTML={{__html: holder.innerHTML}}/>);
 					return true;
 				}
 				for (const mime of ["image/png", "image/jpeg"]) {
 					if (data[mime]) {
-						outputParts.push(<img key={keyPrefix} src={`data:${mime};base64,${data[mime]}`} alt="Cell output"/>);
+						outputParts.push(<img key={keyPrefix} src={`data:${mime};base64,${String(data[mime])}`} alt="Cell output"/>);
 						return true;
 					}
 				}
 				for (const mime of ["text/markdown", "text/plain"]) {
-					if (data[mime] !== undefined) {
-						const rawText = Array.isArray(data[mime]) ? data[mime].join("") : String(data[mime]);
+					const mimeValue = data[mime];
+					if (mimeValue !== undefined) {
+						const rawText = Array.isArray(mimeValue) ? mimeValue.join("") : String(mimeValue);
 						const text = stripAnsiSequences(rawText);
 						outputParts.push(<div className="text-output" key={keyPrefix}>{text}</div>);
 						return text.length > 0;
@@ -159,7 +165,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 			for (let outputIndex = 0; outputIndex < cellOutputs.length; outputIndex++) {
 				const out = cellOutputs[outputIndex];
 				if (out.output_type === "stream") {
-					const rawText = Array.isArray(out.text) ? out.text.join("") : out.text;
+					const rawText = Array.isArray(out.text) ? out.text.join("") : out.text ?? "";
 					const text = stripAnsiSequences(rawText);
 					if (text.trim()) {
 						outputParts.push(<div className="text-output" key={`stream-${outputIndex}`}>{text}</div>);
@@ -209,7 +215,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 					return;
 				}
 
-				setTimeout(checkSync, SYNC_CHECK_INTERVAL);
+				window.setTimeout(checkSync, SYNC_CHECK_INTERVAL);
 			};
 
 			checkSync();
@@ -243,37 +249,36 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 
 			await executor.executeCodeBlock(codeBlock, mode);
 
-			setTimeout(async () => {
-				await renderOutputs();
-				notifyOutputsUpdated();
-				try {
-					await fs.utimes(path, new Date(), new Date());
-				} catch(e) {
-					// ignore
-				}
-				/* when the output is pushed to the .ipynb file, the modification time 
-				of it becomes more recent than the markdown file's. this causes the sync
-				to be biased towards the .ipynb file which in reality is older than the
-				markdown file. to mitigate, the markdown file is force modified after the 
-				output is pushed to the .ipynb file. */
-				setIsLoading(false);
-			}, 100);
+			await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
+			await renderOutputs();
+			notifyOutputsUpdated();
+			try {
+				await fs.utimes(path, new Date(), new Date());
+			} catch {
+				// The timestamp adjustment is best-effort.
+			}
+			/* when the output is pushed to the .ipynb file, the modification time
+			of it becomes more recent than the markdown file's. this causes the sync
+			to be biased towards the .ipynb file which in reality is older than the
+			markdown file. to mitigate, the markdown file is force modified after the
+			output is pushed to the .ipynb file. */
+			setIsLoading(false);
 		} catch (err) {
 			console.error("Error executing code:", err);
 			setIsLoading(false);
 		}
 	};
 
-	const handleRun = async () => {
-		await runCodeBlock("cell");
+	const handleRun = () => {
+		void runCodeBlock("cell");
 	};
 
-	const handleRunAbove = async () => {
-		await runCodeBlock("above");
+	const handleRunAbove = () => {
+		void runCodeBlock("above");
 	};
 
-	const handleRunCellAndBelow = async () => {
-		await runCodeBlock("cell-and-below");
+	const handleRunCellAndBelow = () => {
+		void runCodeBlock("cell-and-below");
 	};
 
 	const handleToggleRunMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -282,7 +287,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 		setIsRunMenuOpen((value) => !value);
 	};
 
-	const handleClear = async () => {
+	const clearOutput = async () => {
 		if (!path || currentIndex === undefined) return;
 
 		setIsRunMenuOpen(false);
@@ -294,14 +299,14 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 
 			try {
 				await fs.access(ipynbPath);
-			} catch (e) {
+			} catch {
 				await renderOutputs();
 				return;
 			}
 
 			const raw = await fs.readFile(ipynbPath, "utf-8");
-			const notebook = JSON.parse(raw);
-			const cells = notebook.cells.filter((c: { cell_type: string }) => c.cell_type === "code");
+			const notebook = parseNotebook(raw);
+			const cells = notebook.cells.filter(isCodeCell);
 
 			if (cells.length <= currentIndex || !cells[currentIndex]) {
 				await renderOutputs();
@@ -319,6 +324,10 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 		}
 	};
 
+	const handleClear = () => {
+		void clearOutput();
+	};
+
 	useEffect(() => {
 		if (executionEnabled) void renderOutputs();
 	}, [path, currentIndex, executionEnabled]);
@@ -332,11 +341,11 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 				setIsPaired(paired);
 			}
 		};
-		checkPairing();
+		void checkPairing();
 
-		const eventRef = plugin.app.metadataCache.on("changed", (file: { path: any; }) => {
+		const eventRef = plugin.app.metadataCache.on("changed", (file) => {
 			if (activeFile && file.path === activeFile.path) {
-				checkPairing();
+				void checkPairing();
 			}
 		});
 
