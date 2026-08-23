@@ -1,4 +1,3 @@
-export const JUPYTER_BRIDGE_SOURCE = String.raw`
 import json
 import os
 import queue
@@ -296,4 +295,3 @@ finally:
         keys = list(sessions.keys())
     for key in keys:
         close_session(key)
-`;

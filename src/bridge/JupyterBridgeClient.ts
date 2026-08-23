@@ -1,7 +1,7 @@
 import {spawn} from "child_process";
 import * as path from "path";
 import {KernelConnection, KernelExecutionResult} from "../kernels/types";
-import {JUPYTER_BRIDGE_SOURCE} from "./pythonBridgeSource";
+import pythonBridgeSource from "./pythonBridge.py";
 
 type PendingRequest = {
 	resolve: (value: unknown) => void;
@@ -151,7 +151,7 @@ export class JupyterBridgeClient {
 			this.readyReject = reject;
 		});
 
-		const bridgeProcess: BridgeProcess = spawn(this.toolingPython, ["-u", "-c", JUPYTER_BRIDGE_SOURCE], {
+		const bridgeProcess: BridgeProcess = spawn(this.toolingPython, ["-u", "-c", pythonBridgeSource], {
 			env,
 			stdio: ["pipe", "pipe", "pipe"],
 		});
