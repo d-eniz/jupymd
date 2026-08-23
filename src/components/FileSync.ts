@@ -41,11 +41,13 @@ class NotebookFileSelectorModal extends FuzzySuggestModal<TFile> {
 	onChooseItem(file: TFile): void {
 		this.resolver?.(file);
 		this.resolver = null;
+		this.selected = false;
 	}
 
 	onClose(): void {
 		super.onClose();
-		if (!this.selected) this.resolver?.(null);
+		if (this.selected) return;
+		this.resolver?.(null);
 		this.resolver = null;
 	}
 }
@@ -104,9 +106,16 @@ export class FileSync {
 	}
 
 	async convertNotebookToNote(): Promise<void> {
-		const files = this.app.vault.getFiles().filter(f => f.path.endsWith('.ipynb'));
+		const notebooks = this.app.vault.getFiles().filter((file) => file.path.endsWith(".ipynb"));
+		const files = (await Promise.all(notebooks.map(async (notebook) => {
+			const notePath = notebook.path.replace(/\.ipynb$/, ".md");
+			const note = this.app.vault.getAbstractFileByPath(notePath);
+			if (note instanceof TFile && await isNotebookPaired(this.app, note)) return null;
+			return notebook;
+		}))).filter((file): file is TFile => file !== null);
+
 		if (files.length === 0) {
-			new Notice("No Jupyter notebook (.ipynb) files found in your vault.");
+			new Notice("No unpaired Jupyter notebook (.ipynb) files found in your vault.");
 			return;
 		}
 
