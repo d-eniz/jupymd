@@ -1,16 +1,46 @@
-import {ChildProcess, spawn} from "child_process";
+import {spawn} from "child_process";
 import * as path from "path";
 import {KernelConnection, KernelExecutionResult} from "../kernels/types";
 import {JUPYTER_BRIDGE_SOURCE} from "./pythonBridgeSource";
 
 type PendingRequest = {
-	resolve: (value: any) => void;
+	resolve: (value: unknown) => void;
 	reject: (error: Error) => void;
-	timer: NodeJS.Timeout;
+	timer: number;
 };
 
+type BridgeProcess = {
+	stdin: {write(data: string): boolean};
+	stdout: {
+		setEncoding(encoding: string): unknown;
+		on(event: "data", listener: (chunk: string) => void): unknown;
+	};
+	stderr: {
+		setEncoding(encoding: string): unknown;
+		on(event: "data", listener: (chunk: string) => void): unknown;
+	};
+	on(event: "error", listener: (error: Error) => void): unknown;
+	on(event: "close", listener: (code: number | null) => void): unknown;
+	kill(): boolean;
+};
+
+type BridgeMessage = {
+	event?: string;
+	id?: number;
+	ok?: boolean;
+	result?: unknown;
+	error?: string;
+	details?: unknown;
+};
+
+function isBridgeMessage(value: unknown): value is BridgeMessage {
+	if (!value || typeof value !== "object") return false;
+	const candidate = value as BridgeMessage;
+	return candidate.event === "ready" || typeof candidate.id === "number";
+}
+
 export class JupyterBridgeClient {
-	private process: ChildProcess | null = null;
+	private process: BridgeProcess | null = null;
 	private stdoutBuffer = "";
 	private nextRequestId = 1;
 	private pending = new Map<number, PendingRequest>();
@@ -82,14 +112,18 @@ export class JupyterBridgeClient {
 		const requestId = this.nextRequestId++;
 
 		return new Promise<T>((resolve, reject) => {
-			const timer = setTimeout(() => {
+			const timer = window.setTimeout(() => {
 				this.pending.delete(requestId);
 				reject(new Error(`Jupyter bridge request timed out: ${operation}`));
 			}, timeoutMs);
 
-			this.pending.set(requestId, {resolve, reject, timer});
-			if (!this.process?.stdin) {
-				clearTimeout(timer);
+			this.pending.set(requestId, {
+				resolve: (value) => resolve(value as T),
+				reject,
+				timer,
+			});
+			if (!this.process) {
+				window.clearTimeout(timer);
 				this.pending.delete(requestId);
 				reject(new Error("Jupyter bridge is not available"));
 				return;
@@ -117,16 +151,16 @@ export class JupyterBridgeClient {
 			this.readyReject = reject;
 		});
 
-		const bridgeProcess = spawn(this.toolingPython, ["-u", "-c", JUPYTER_BRIDGE_SOURCE], {
+		const bridgeProcess: BridgeProcess = spawn(this.toolingPython, ["-u", "-c", JUPYTER_BRIDGE_SOURCE], {
 			env,
 			stdio: ["pipe", "pipe", "pipe"],
 		});
 		this.process = bridgeProcess;
 
-		bridgeProcess.stdout?.setEncoding("utf-8");
-		bridgeProcess.stdout?.on("data", (chunk: string) => this.handleStdout(chunk));
-		bridgeProcess.stderr?.setEncoding("utf-8");
-		bridgeProcess.stderr?.on("data", (chunk: string) => {
+		bridgeProcess.stdout.setEncoding("utf-8");
+		bridgeProcess.stdout.on("data", (chunk: string) => this.handleStdout(chunk));
+		bridgeProcess.stderr.setEncoding("utf-8");
+		bridgeProcess.stderr.on("data", (chunk: string) => {
 			console.error("Jupyter bridge stderr:", chunk.trimEnd());
 		});
 		bridgeProcess.on("error", (error) => {
@@ -139,7 +173,7 @@ export class JupyterBridgeClient {
 			this.resetProcess(error);
 		});
 
-		const startupTimer = setTimeout(() => {
+		const startupTimer = window.setTimeout(() => {
 			if (this.readyReject) {
 				const error = new Error("Jupyter bridge initialization timed out");
 				this.readyReject(error);
@@ -148,8 +182,8 @@ export class JupyterBridgeClient {
 		}, 15000);
 
 		this.readyPromise.then(
-			() => clearTimeout(startupTimer),
-			() => clearTimeout(startupTimer)
+			() => window.clearTimeout(startupTimer),
+			() => window.clearTimeout(startupTimer)
 		);
 		return this.readyPromise;
 	}
@@ -167,13 +201,18 @@ export class JupyterBridgeClient {
 	}
 
 	private handleMessage(line: string): void {
-		let message: any;
+		let parsed: unknown;
 		try {
-			message = JSON.parse(line);
+			parsed = JSON.parse(line);
 		} catch (error) {
 			console.error("Invalid Jupyter bridge message:", line, error);
 			return;
 		}
+		if (!isBridgeMessage(parsed)) {
+			console.error("Invalid Jupyter bridge message shape:", line);
+			return;
+		}
+		const message = parsed;
 
 		if (message.event === "ready") {
 			this.readyResolve?.();
@@ -182,9 +221,10 @@ export class JupyterBridgeClient {
 			return;
 		}
 
+		if (message.id === undefined) return;
 		const pending = this.pending.get(message.id);
 		if (!pending) return;
-		clearTimeout(pending.timer);
+		window.clearTimeout(pending.timer);
 		this.pending.delete(message.id);
 
 		if (message.ok) {
@@ -205,7 +245,7 @@ export class JupyterBridgeClient {
 		this.stdoutBuffer = "";
 
 		for (const pending of this.pending.values()) {
-			clearTimeout(pending.timer);
+			window.clearTimeout(pending.timer);
 			pending.reject(error);
 		}
 		this.pending.clear();
