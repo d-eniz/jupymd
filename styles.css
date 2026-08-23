@@ -1,5 +1,5 @@
-.edit-block-button {
-	display: none !important;
+.markdown-rendered .code-container .edit-block-button {
+	display: none;
 }
 
 .code-container {
@@ -56,13 +56,13 @@
 	padding: 0.5em;
 }
 
-.code-output {
+.markdown-rendered .code-container > .code-output {
 	font-size: 0.9em;
 	line-height: 1.45;
-	font-family: var(--font-monospace), monospace !important;
-	background-color: var(--background-primary) !important;
-	border: none !important;
-	border-top: 1px solid var(--background-modifier-border) !important;
+	font-family: var(--font-monospace), monospace;
+	background-color: var(--background-primary);
+	border: none;
+	border-top: 1px solid var(--background-modifier-border);
 	margin: 0;
 	padding: 0.75em 1em 0.9em;
 	overflow-x: auto;
@@ -86,24 +86,23 @@
 	color: var(--text-error);
 }
 
-.code-output img {
+.markdown-rendered .code-container > .code-output img {
 	display: block;
 	max-width: 100%;
-	max-height: 500px !important;
+	max-height: 500px;
 	margin: 0.5em 0;
 	border: none;
 	border-radius: 3px;
-	background-color: var(--background-primary) !important;
+	background-color: var(--background-primary);
 }
 
-.icon-button {
-	box-shadow: none !important;
-	border: none !important;
-	outline: none !important;
-	background-color: transparent !important;
+.markdown-rendered .code-container button.icon-button {
+	box-shadow: none;
+	border: none;
+	background-color: transparent;
 	width: 24px;
 	height: 24px;
-	padding: 0 !important;
+	padding: 0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -111,12 +110,11 @@
 	cursor: pointer;
 }
 
-.split-run-button {
-	box-shadow: none !important;
-	border: none !important;
-	outline: none !important;
-	background-color: transparent !important;
-	padding: 0 !important;
+.markdown-rendered .code-container button.split-run-button {
+	box-shadow: none;
+	border: none;
+	background-color: transparent;
+	padding: 0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -124,16 +122,16 @@
 	cursor: pointer;
 }
 
-.split-run-button-main {
+.markdown-rendered .code-container button.split-run-button-main {
 	width: 24px;
-	padding: 0 0.1em !important;
+	padding: 0 0.1em;
 	border-radius: 5px 0 0 5px;
 }
 
-.split-run-button-toggle {
+.markdown-rendered .code-container button.split-run-button-toggle {
 	width: 16px;
 	border-radius: 0 5px 5px 0;
-	padding-left: 0 !important;
+	padding-left: 0;
 }
 
 .run-dropdown-menu {
@@ -149,14 +147,13 @@
 	z-index: 999;
 }
 
-.run-dropdown-item {
-	box-shadow: none !important;
-	border: none !important;
-	outline: none !important;
-	background-color: transparent !important;
+.run-dropdown-menu button.run-dropdown-item {
+	box-shadow: none;
+	border: none;
+	background-color: transparent;
 	width: 24px;
 	height: 24px;
-	padding: 0 !important;
+	padding: 0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -165,17 +162,17 @@
 	cursor: pointer;
 }
 
-.icon-button:disabled,
-.split-run-button:disabled,
-.run-dropdown-item:disabled {
+.markdown-rendered .code-container button.icon-button:disabled,
+.markdown-rendered .code-container button.split-run-button:disabled,
+.run-dropdown-menu button.run-dropdown-item:disabled {
 	opacity: 0.5;
-	cursor: default !important;
+	cursor: default;
 }
 
-.split-run-button:hover:not(:disabled),
-.icon-button:hover:not(:disabled),
-.run-dropdown-item:hover:not(:disabled) {
-	background-color: var(--background-modifier-hover) !important;
+.markdown-rendered .code-container button.split-run-button:hover:not(:disabled),
+.markdown-rendered .code-container button.icon-button:hover:not(:disabled),
+.run-dropdown-menu button.run-dropdown-item:hover:not(:disabled) {
+	background-color: var(--background-modifier-hover);
 }
 
 .icon {
@@ -218,11 +215,11 @@
 	color: var(--text-normal);
 }
 
-.code-container .cm-scroller {
+.markdown-rendered .code-container .cm-scroller {
 	padding: 1em;
 	background-color: var(--background-primary);
 	overflow: auto;
-	font-family: var(--font-monospace), monospace !important;
+	font-family: var(--font-monospace), monospace;
 }
 
 .code-container .cm-editor {
@@ -242,11 +239,11 @@
 	overflow: hidden;
 }
 
-.code-source pre {
+.markdown-rendered .code-container .code-source pre {
 	display: block;
 	box-sizing: border-box;
 	width: 100%;
-	margin: 0 !important;
+	margin: 0;
 	border-radius: 0;
 }
 
@@ -257,8 +254,8 @@
 }
 
 @media print {
-	.code-container {
-		margin: 0 0 1em !important;
+	.markdown-preview-view .code-container {
+		margin: 0 0 1em;
 	}
 
 	.code-source,
