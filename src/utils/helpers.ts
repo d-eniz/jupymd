@@ -3,6 +3,9 @@ import {promisify} from "util";
 import * as path from "path";
 import * as fs from "fs";
 import {App, FileSystemAdapter, TFile, TAbstractFile, Notice} from "obsidian";
+import upgradeNotebookSource from "../notebook/upgradeNotebook.py";
+
+const execFileAsync = promisify(execFile);
 
 export function getAbsolutePath(file: TAbstractFile): string {
 	if (!file) return "";
@@ -37,6 +40,28 @@ export async function runJupytext(pythonPath: string, args: string[]): Promise<v
 		});
 	}
 
+export async function upgradeLegacyNotebook(
+	pythonPath: string,
+	notebookPath: string
+): Promise<boolean> {
+	const rawNotebook = await fs.promises.readFile(notebookPath, "utf-8");
+	const notebook = JSON.parse(rawNotebook) as {nbformat?: unknown};
+	if (typeof notebook.nbformat !== "number" || notebook.nbformat >= 4) return false;
+
+	try {
+		await execFileAsync(
+			pythonPath,
+			["-c", upgradeNotebookSource, notebookPath],
+			{env: {...process.env, PYTHONIOENCODING: "UTF-8"}}
+		);
+		return true;
+	} catch (error: unknown) {
+		const processError = error as Error & {stderr?: string};
+		const details = processError.stderr?.trim() || getErrorMessage(error);
+		throw new Error(`Failed to upgrade legacy notebook to format v4: ${details}`);
+	}
+}
+
 export async function isNotebookPaired(app: App, file: TFile): Promise<boolean> {
 	if (!file) return false;
 
@@ -56,7 +81,6 @@ export async function isNotebookPaired(app: App, file: TFile): Promise<boolean> 
 }
 
 export async function installLibs(interpreter: string, libraries: string): Promise<boolean> {
-	const execFileAsync = promisify(execFile);
 	const packages = libraries.split(/\s+/).map((item) => item.trim()).filter(Boolean);
 
 	try {

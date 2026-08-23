@@ -1,6 +1,12 @@
 import {App, Notice, TFile, MarkdownView, FuzzySuggestModal, FuzzyMatch} from "obsidian";
 import {execFile} from "child_process";
-import {getAbsolutePath, getErrorMessage, isNotebookPaired, runJupytext} from "../utils/helpers";
+import {
+	getAbsolutePath,
+	getErrorMessage,
+	isNotebookPaired,
+	runJupytext,
+	upgradeLegacyNotebook,
+} from "../utils/helpers";
 import {KernelConnection} from "../kernels/types";
 import * as fs from "fs";
 import {rebuildWorkspaceLeaf} from "../utils/workspace";
@@ -126,10 +132,13 @@ export class FileSync {
 		const mdPath = absPath.replace(/\.ipynb$/, ".md");
 
 		try {
+			const upgraded = await upgradeLegacyNotebook(this.pythonPath, absPath);
 			await runJupytext(this.pythonPath, ["--to", "markdown", absPath]);
 			await runJupytext(this.pythonPath, ["--set-formats", "ipynb,md", absPath]);
 
-			new Notice(`Note created and paired: ${mdPath}`);
+			new Notice(upgraded
+				? `Legacy notebook upgraded to format v4; note created and paired: ${mdPath}`
+				: `Note created and paired: ${mdPath}`);
 
 			const mdRelative = this.app.vault.getFiles().find(
 				f => getAbsolutePath(f) === mdPath
