@@ -227,7 +227,7 @@ export class PythonEnvironmentSelectorModal extends FuzzySuggestModal<PythonEnvi
 	renderSuggestion(match: FuzzyMatch<PythonEnvironmentOption>, el: HTMLElement) {
 		const item = match.item;
 		const badge = isCreateVenvOption(item)
-			? null
+			? {cls: "kernel-badge-create", text: "recommended"}
 			: isCustomPathOption(item)
 				? {cls: "kernel-badge-custom", text: "custom"}
 				: item.source === "pyenv"
