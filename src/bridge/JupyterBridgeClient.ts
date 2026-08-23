@@ -142,6 +142,8 @@ export class JupyterBridgeClient {
 		}
 
 		const env = {...process.env};
+		// The bridge protocol is UTF-8; do not inherit legacy Windows code pages.
+		env.PYTHONIOENCODING = "utf-8";
 		env.JUPYTER_PATH = [this.jupyterDataDir, env.JUPYTER_PATH || ""]
 			.filter(Boolean)
 			.join(path.delimiter);
