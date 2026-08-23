@@ -5,7 +5,7 @@ import {JupyMDSettingTab} from "./components/Settings";
 import {CodeExecutor} from "./components/CodeExecutor";
 import {FileSync} from "./components/FileSync";
 import {NotebookKernelSelectorModal} from "./components/KernelSelector";
-import {DEFAULT_SETTINGS, JupyMDPluginSettings} from "./components/types";
+import {DEFAULT_SETTINGS, JupyMDPluginSettings, parseNotebook} from "./components/types";
 import {registerCommands} from "./commands";
 import {NotebookCodeBlock} from "./components/CodeBlock";
 import {HighlightedCodeBlock} from "./components/HighlightedCodeBlock";
@@ -18,6 +18,7 @@ import {KernelConnection} from "./kernels/types";
 import {languageSupportRegistry} from "./languages/LanguageSupport";
 import {getExecutableCellIndex} from "./notebook/NotebookCellIndex";
 import {getKernelStatusLabel} from "./languages/KernelStatusLabel";
+import {rebuildWorkspaceLeaf} from "./utils/workspace";
 
 export default class JupyMDPlugin extends Plugin {
 	settings: JupyMDPluginSettings;
@@ -41,7 +42,7 @@ export default class JupyMDPlugin extends Plugin {
 		);
 		this.kernelService = new NotebookKernelService(this.bridge, this.managedKernelSpecs);
 		this.executor = new CodeExecutor(this, this.kernelService, this.app);
-		this.fileSync = new FileSync(this.app, this.settings.toolingPython, this.settings);
+		this.fileSync = new FileSync(this.app, this.settings.toolingPython);
 
 		this.kernelStatusBarItem = this.addStatusBarItem();
 		this.kernelStatusBarItem.addClass("kernel-status");
@@ -63,8 +64,8 @@ export default class JupyMDPlugin extends Plugin {
 		}
 	}
 
-	async onunload() {
-		await this.executor.cleanup();
+	onunload(): void {
+		void this.executor.cleanup();
 	}
 
 	async loadSettings() {
@@ -84,9 +85,8 @@ export default class JupyMDPlugin extends Plugin {
 		this.settings.toolingPython = newPath;
 		await this.saveSettings();
 		await this.bridge.setToolingPython(newPath);
-		this.fileSync = new FileSync(this.app, newPath, this.settings);
+		this.fileSync = new FileSync(this.app, newPath);
 		this.kernelStatusLabels.clear();
-		this.settingTab?.display();
 		void this.registerDiscoveredKernelLanguages();
 		new Notice(`Jupyter tooling environment set to: ${newPath}`);
 	}
@@ -138,7 +138,7 @@ export default class JupyMDPlugin extends Plugin {
 
 		let currentName: string | undefined;
 		try {
-			const notebook = JSON.parse(fs.readFileSync(ipynbPath, "utf-8"));
+			const notebook = parseNotebook(fs.readFileSync(ipynbPath, "utf-8"));
 			currentName = notebook?.metadata?.kernelspec?.name;
 		} catch {
 			// The selector can still offer recovery for malformed/missing metadata.
@@ -191,7 +191,7 @@ export default class JupyMDPlugin extends Plugin {
 					this.app.workspace.getLeavesOfType("markdown").forEach((leaf) => {
 						const view = leaf.view;
 						if (view instanceof MarkdownView && view.file?.path === file.path) {
-							(leaf as any).rebuildView();
+							rebuildWorkspaceLeaf(leaf);
 						}
 					});
 				}
@@ -227,8 +227,7 @@ export default class JupyMDPlugin extends Plugin {
 		this.registerMarkdownCodeBlockProcessor(normalizedLanguage, async (source, el, ctx) => {
 			const sectionInfo = ctx.getSectionInfo(el);
 			el.empty();
-			const reactRoot = document.createElement("div");
-			el.appendChild(reactRoot);
+			const reactRoot = el.createDiv();
 			const sourceFile = this.app.vault.getFileByPath(ctx.sourcePath);
 			if (!(sourceFile instanceof TFile)) {
 				createRoot(reactRoot).render(<HighlightedCodeBlock code={source} language={normalizedLanguage}/>);

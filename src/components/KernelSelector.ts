@@ -10,7 +10,7 @@ import {
 } from "../utils/pythonEnvironmentDiscovery";
 import {validatePythonPath} from "../utils/pythonPathUtils";
 import {runQuickSetup} from "../utils/quickSetup";
-import {installLibs} from "../utils/helpers";
+import {getErrorMessage, installLibs} from "../utils/helpers";
 import {KernelConnection} from "../kernels/types";
 import {languageSupportRegistry} from "../languages/LanguageSupport";
 
@@ -155,8 +155,8 @@ export class PythonEnvironmentSelectorModal extends FuzzySuggestModal<PythonEnvi
 		});
 	}
 
-	onOpen() {
-		super.onOpen();
+	async onOpen(): Promise<void> {
+		await super.onOpen();
 		this.isLoading = true;
 		this.emptyStateText = "Discovering Python environments…";
 		// @ts-ignore - internal Obsidian API
@@ -245,7 +245,11 @@ export class PythonEnvironmentSelectorModal extends FuzzySuggestModal<PythonEnvi
 		bottomRow.createSpan({cls: "kernel-suggestion-path", text: item.path});
 	}
 
-	async onChooseItem(item: PythonEnvironmentOption) {
+	onChooseItem(item: PythonEnvironmentOption): void {
+		void this.chooseItem(item);
+	}
+
+	private async chooseItem(item: PythonEnvironmentOption): Promise<void> {
 		let selectedPath: string | null = null;
 		try {
 			if (isCreateVenvOption(item)) {
@@ -325,8 +329,8 @@ class JupyterKernelSelectorModal extends FuzzySuggestModal<KernelConnection> {
 		});
 	}
 
-	onOpen() {
-		super.onOpen();
+	async onOpen(): Promise<void> {
+		await super.onOpen();
 		this.emptyStateText = "No installed Jupyter kernels found.";
 		void this.loadKernels();
 	}
@@ -488,7 +492,7 @@ export class NotebookKernelSelectorModal extends FuzzySuggestModal<KernelSourceO
 	selectSuggestion(value: FuzzyMatch<KernelSourceOption>, _evt: MouseEvent | KeyboardEvent): void {
 		this.isChoosing = true;
 		this.close();
-		void this.onChooseItem(value.item);
+		this.onChooseItem(value.item);
 	}
 
 	getItems(): KernelSourceOption[] {
@@ -508,7 +512,11 @@ export class NotebookKernelSelectorModal extends FuzzySuggestModal<KernelSourceO
 			.createSpan({cls: "kernel-suggestion-path", text: item.description});
 	}
 
-	async onChooseItem(item: KernelSourceOption) {
+	onChooseItem(item: KernelSourceOption): void {
+		void this.chooseItem(item);
+	}
+
+	private async chooseItem(item: KernelSourceOption): Promise<void> {
 		let selectedKernel: KernelConnection | null = null;
 		try {
 			selectedKernel = item.id === "jupyter-kernels"
@@ -521,7 +529,7 @@ export class NotebookKernelSelectorModal extends FuzzySuggestModal<KernelSourceO
 				: await this.selectPythonEnvironmentKernel();
 		} catch (error) {
 			console.error("Failed to prepare notebook kernel:", error);
-			if ((error as Error).message !== "IPyKernel installation was cancelled.") {
+			if (getErrorMessage(error) !== "IPyKernel installation was cancelled.") {
 				new Notice("Failed to prepare notebook kernel. Check the console for details.");
 			}
 		}

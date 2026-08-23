@@ -1,22 +1,64 @@
-import {App, Notice, TFile, MarkdownView} from "obsidian";
-import {exec} from "child_process";
-import {getAbsolutePath, isNotebookPaired, runJupytext} from "../utils/helpers";
-import {JupyMDPluginSettings} from "./types";
+import {App, Notice, TFile, MarkdownView, FuzzySuggestModal, FuzzyMatch} from "obsidian";
+import {execFile} from "child_process";
+import {getAbsolutePath, getErrorMessage, isNotebookPaired, runJupytext} from "../utils/helpers";
 import {KernelConnection} from "../kernels/types";
 import * as fs from "fs";
+import {rebuildWorkspaceLeaf} from "../utils/workspace";
+
+class NotebookFileSelectorModal extends FuzzySuggestModal<TFile> {
+	private resolver: ((file: TFile | null) => void) | null = null;
+	private selected = false;
+
+	constructor(app: App, private readonly files: TFile[]) {
+		super(app);
+		this.setPlaceholder("Select a Jupyter notebook to convert…");
+	}
+
+	openAndGetValue(): Promise<TFile | null> {
+		return new Promise((resolve) => {
+			this.resolver = resolve;
+			this.open();
+		});
+	}
+
+	getItems(): TFile[] {
+		return this.files;
+	}
+
+	getItemText(file: TFile): string {
+		return file.path;
+	}
+
+	renderSuggestion(match: FuzzyMatch<TFile>, el: HTMLElement): void {
+		el.createDiv({text: match.item.path});
+	}
+
+	selectSuggestion(value: FuzzyMatch<TFile>, event: MouseEvent | KeyboardEvent): void {
+		this.selected = true;
+		super.selectSuggestion(value, event);
+	}
+
+	onChooseItem(file: TFile): void {
+		this.resolver?.(file);
+		this.resolver = null;
+	}
+
+	onClose(): void {
+		super.onClose();
+		if (!this.selected) this.resolver?.(null);
+		this.resolver = null;
+	}
+}
 
 export class FileSync {
 	private readonly pythonPath: string;
-	private settings: JupyMDPluginSettings;
-
 	private lastSyncTime: number = 0;
-	private syncDebounceTimeout: NodeJS.Timeout | null = null;
+	private syncDebounceTimeout: number | null = null;
 	private readonly SYNC_DEADTIME_MS = 1500;
 	private readonly DEBOUNCE_DELAY_MS = 500;
 
-	constructor(private app: App, pythonPath: string, settings: JupyMDPluginSettings) {
+	constructor(private app: App, pythonPath: string) {
 		this.pythonPath = pythonPath;
-		this.settings = settings;
 	}
 
 	public isSyncBlocked(): boolean {
@@ -35,14 +77,14 @@ export class FileSync {
 		}
 
 		if (this.syncDebounceTimeout) {
-			clearTimeout(this.syncDebounceTimeout);
+			window.clearTimeout(this.syncDebounceTimeout);
 		}
 
-		this.syncDebounceTimeout = setTimeout(async () => {
+		this.syncDebounceTimeout = window.setTimeout(() => {
 			this.syncDebounceTimeout = null;
 
 			if (!this.isSyncBlocked()) {
-				await this.performSync(targetFile);
+				void this.performSync(targetFile);
 			}
 		}, this.DEBOUNCE_DELAY_MS);
 
@@ -61,64 +103,14 @@ export class FileSync {
 		}
 	}
 
-	async convertNotebookToNote() {
+	async convertNotebookToNote(): Promise<void> {
 		const files = this.app.vault.getFiles().filter(f => f.path.endsWith('.ipynb'));
 		if (files.length === 0) {
 			new Notice("No Jupyter notebook (.ipynb) files found in your vault.");
 			return;
 		}
 
-		const fileNames = files.map(f => f.path);
-		const selected = await new Promise<string | null>((resolve) => {
-			const modal = document.createElement('div');
-			modal.style.position = 'fixed';
-			modal.style.top = '30%';
-			modal.style.left = '50%';
-			modal.style.transform = 'translate(-50%, -50%)';
-			modal.style.background = 'var(--background-primary)';
-			modal.style.padding = '2em';
-			modal.style.borderRadius = '8px';
-			modal.style.zIndex = '9999';
-			modal.style.boxShadow = '0 2px 16px rgba(0,0,0,0.2)';
-
-			const label = document.createElement('div');
-			label.textContent = 'Select a Jupyter notebook to convert:';
-			label.style.marginBottom = '1em';
-			modal.appendChild(label);
-
-			const select = document.createElement('select');
-			select.style.width = '100%';
-			for (const name of fileNames) {
-				const option = document.createElement('option');
-				option.value = name;
-				option.textContent = name;
-				select.appendChild(option);
-			}
-			modal.appendChild(select);
-
-			const btn = document.createElement('button');
-			btn.textContent = 'Convert';
-			btn.style.marginTop = '1em';
-			btn.onclick = () => {
-				document.body.removeChild(modal);
-				resolve(select.value);
-			};
-			modal.appendChild(btn);
-
-			const cancel = document.createElement('button');
-			cancel.textContent = 'Cancel';
-			cancel.style.marginLeft = '1em';
-			cancel.onclick = () => {
-				document.body.removeChild(modal);
-				resolve(null);
-			};
-			modal.appendChild(cancel);
-
-			document.body.appendChild(modal);
-		});
-
-		if (!selected) return;
-		const file = files.find(f => f.path === selected);
+		const file = await new NotebookFileSelectorModal(this.app, files).openAndGetValue();
 		if (!file) return;
 
 		const absPath = getAbsolutePath(file);
@@ -135,10 +127,10 @@ export class FileSync {
 			);
 
 			if (mdRelative) {
-				this.app.workspace.openLinkText(mdRelative.path, '', true);
+				void this.app.workspace.openLinkText(mdRelative.path, '', true);
 			}
-		} catch (error: any) {
-			new Notice(`Failed to convert notebook: ${error.message}`);
+		} catch (error: unknown) {
+			new Notice(`Failed to convert notebook: ${getErrorMessage(error)}`);
 		}
 	}
 
@@ -184,18 +176,18 @@ export class FileSync {
 					view?.getViewType() ?? ""
 				)[0];
 
-				(leaf as any).rebuildView();
+				rebuildWorkspaceLeaf(leaf);
 			}
 
 			new Notice(`Notebook created and paired: ${ipynbPath}`);
 			return true;
-		} catch (error: any) {
-			new Notice(`Failed to create notebook: ${error.message}`);
+		} catch (error: unknown) {
+			new Notice(`Failed to create notebook: ${getErrorMessage(error)}`);
 			return false;
 		}
 	}
 
-	async openNotebookInEditor(editor: string) {
+	async openNotebookInEditor(editor: string): Promise<void> {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) {
 			new Notice("No active note found.");
@@ -209,9 +201,7 @@ export class FileSync {
 		const mdPath = getAbsolutePath(activeFile);
 		const ipynbPath = mdPath.replace(/\.md$/, ".ipynb");
 
-		const command = `${editor} "${ipynbPath}"`;
-
-		exec(command, (error) => {
+		execFile(editor, [ipynbPath], (error) => {
 			if (error) {
 				new Notice(
 					`Failed to open notebook in editor: ${error.message}`
@@ -223,7 +213,7 @@ export class FileSync {
 		});
 	}
 
-	async syncFiles(file: TFile) {
+	async syncFiles(file: TFile): Promise<void> {
 		if (!(await isNotebookPaired(this.app, file))) return;
 
 		const filePath = getAbsolutePath(file);
@@ -233,8 +223,8 @@ export class FileSync {
 			// `--sync` updates the paired notebook from markdown changes while preserving
 			// existing notebook outputs instead of recreating the .ipynb from scratch.
 			await runJupytext(this.pythonPath, ["--sync", ipynbPath]);
-		} catch (error: any) {
-			console.error(`Failed to sync Markdown file: ${error.message}`);
+		} catch (error: unknown) {
+			console.error(`Failed to sync Markdown file: ${getErrorMessage(error)}`);
 		}
 	}
 }
