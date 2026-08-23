@@ -33,13 +33,7 @@ With JupyMD you can:
 
 JupyMD is designed to be a feature rich Jupyter notebook editor inside of Obsidian, similar to VSCode's Jupyter notebook functionality and Jupyter Lab. Some of its features include:
 
-- **Multiple Programming Languages** – JupyMD supports:
-    - Python
-    - Julia
-    - R
-    - JavaScript/TypeScript
-    - Bash
-    - Rust
+- **Multiple Programming Languages** – Built-in support for Python, Julia, R, JavaScript, TypeScript, Bash, and Rust. Additional languages can also work through compatible Jupyter kernels.
 - **Notebook Conversion**
     - Convert existing notes in Obsidian to Jupyter notebooks
     - Convert existing Jupyter notebooks to Markdown notes
@@ -61,7 +55,19 @@ The following dependencies can be installed natively through the plugin settings
 - [Jupytext](https://github.com/mwouts/jupytext)
 - [Jupyter Client](https://github.com/jupyter/jupyter_client)
 
-JupyMD natively prompts an installation for [IPython](https://ipython.org/) when a Python interpreter is selected. For further language support, you will need to manually install [Jupyter kernels listed here](https://github.com/jupyter/jupyter/wiki/Jupyter-kernels) along with your supported programming language of choice. Installed Jupyter kernels are automatically detected by JupyMD.
+JupyMD natively prompts an installation for [ipykernel](https://pypi.org/project/ipykernel/) when a Python interpreter is selected. For further language support, you will need to manually install [Jupyter kernels listed here](https://github.com/jupyter/jupyter/wiki/Jupyter-kernels) along with your programming language of choice. Installed Jupyter kernels are automatically detected by JupyMD.
+
+### Using other programming languages
+
+JupyMD runs code through the standard Jupyter kernel protocol, allowing it to discover kernels beyond its built-in languages. To add another language, install its runtime and a compatible Jupyter kernel, then reload JupyMD and select the kernel for your notebook.
+
+When JupyMD starts, it registers interactive code blocks for Python, Julia, R, JavaScript, TypeScript, Bash, and Rust. It also reads the language reported by every detected Jupyter kernel and registers a matching JupyMD code block automatically. For example, a kernel reporting `c++` will cause ` ```c++ ` blocks to receive JupyMD’s execution controls.
+
+Compatibility depends on how the kernel identifies its language. The code fence must match the language reported by the kernel, and Jupytext must recognize it as a code cell. Some kernels use different identifiers such as `C++17` and `c++`, which may require adjusting the kernelspec or code fence.
+
+Languages without built in support may not include syntax highlighting, aliases, friendly runtime details, or the same level of integration and testing as the languages listed above.
+
+To display a block using Obsidian’s standard code-block renderer instead of JupyMD’s interactive renderer, capitalize its language identifier, for example, use ` ```Python ` instead of ` ```python `.
 
 ## Getting started
 
