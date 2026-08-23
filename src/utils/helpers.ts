@@ -16,6 +16,10 @@ export function getAbsolutePath(file: TAbstractFile): string {
 	}
 }
 
+export function getErrorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
 export async function runJupytext(pythonPath: string, args: string[]): Promise<void> {
 		return new Promise((resolve, reject) => {
 			execFile(
@@ -24,7 +28,7 @@ export async function runJupytext(pythonPath: string, args: string[]): Promise<v
 				(error, stdout, stderr) => {
 					if (error) {
 						console.error(stderr || error.message);
-						reject(error);
+						reject(error instanceof Error ? error : new Error(String(error)));
 						return;
 					}
 					resolve();

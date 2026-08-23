@@ -1,9 +1,9 @@
-import {App, Notice, Platform} from "obsidian";
+import {App, FileSystemAdapter, Notice, Platform} from "obsidian";
 import * as path from "path";
 import * as fs from "fs/promises";
 import {execFile} from "child_process";
 import {promisify} from "util";
-import { installLibs } from "./helpers";
+import {getErrorMessage, installLibs} from "./helpers";
 import {getDefaultPythonPath} from "./pythonPathUtils";
 
 const execFileAsync = promisify(execFile);
@@ -14,8 +14,8 @@ export async function runQuickSetup(
 	envNameInput?: string,
 	packages = "ipykernel"
 ): Promise<string | null> {
-	const adapter = app.vault.adapter as any;
-	if (!adapter.getBasePath) {
+	const adapter = app.vault.adapter;
+	if (!(adapter instanceof FileSystemAdapter)) {
 		new Notice("Quick setup is only supported on local file systems.");
 		return null;
 	}
@@ -52,9 +52,9 @@ export async function runQuickSetup(
 
 		new Notice(`Quick setup complete! Virtual environment '${envName}' created successfully.`);
 		return venvPythonPath;
-	} catch (error: any) {
+	} catch (error: unknown) {
 		console.error("Quick setup failed:", error);
-		new Notice(`Quick setup failed: ${error.message || error}`);
+		new Notice(`Quick setup failed: ${getErrorMessage(error)}`);
 		return null;
 	}
 }

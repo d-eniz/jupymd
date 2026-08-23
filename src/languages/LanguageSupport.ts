@@ -1,5 +1,5 @@
 export type RuntimeVersionProbe = {
-	executable: "kernel" | string;
+	executable: string;
 	args: string[];
 	pattern: RegExp;
 	prefix?: string;
