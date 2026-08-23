@@ -1,4 +1,4 @@
-import {exec, execFile} from "child_process";
+import {execFile} from "child_process";
 import {promisify} from "util";
 import * as path from "path";
 import * as fs from "fs";
@@ -16,6 +16,10 @@ export function getAbsolutePath(file: TAbstractFile): string {
 	}
 }
 
+export function getErrorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
 export async function runJupytext(pythonPath: string, args: string[]): Promise<void> {
 		return new Promise((resolve, reject) => {
 			execFile(
@@ -24,7 +28,7 @@ export async function runJupytext(pythonPath: string, args: string[]): Promise<v
 				(error, stdout, stderr) => {
 					if (error) {
 						console.error(stderr || error.message);
-						reject(error);
+						reject(error instanceof Error ? error : new Error(String(error)));
 						return;
 					}
 					resolve();
@@ -51,13 +55,12 @@ export async function isNotebookPaired(app: App, file: TFile): Promise<boolean> 
 	return !!(frontmatter && (frontmatter.jupyter !== undefined || frontmatter.jupytext !== undefined));
 }
 
-export async function installLibs(interpreter: string, libraries: string): Promise<void> {
-
-	const execAsync = promisify(exec)
-	const command = `${shellQuote(interpreter)} -m pip install ${libraries}`
+export async function installLibs(interpreter: string, libraries: string): Promise<boolean> {
+	const execFileAsync = promisify(execFile);
+	const packages = libraries.split(/\s+/).map((item) => item.trim()).filter(Boolean);
 
 	try {
-		const {stdout, stderr} = await execAsync(command)
+		const {stderr} = await execFileAsync(interpreter, ["-m", "pip", "install", ...packages]);
 
 		new Notice(`Required libraries installed for ${interpreter}`)
 
@@ -65,12 +68,10 @@ export async function installLibs(interpreter: string, libraries: string): Promi
 			new Notice("Warnings issued for installation, check console for details.");
 			console.error(stderr)
 		}
+		return true;
 	} catch (err) {
 		new Notice("Failed to install packages, check console for details.")
 		console.error(err)
+		return false;
 	}
-}
-
-function shellQuote(path: string): string {
-	return `"${path.replace(/(["\\$`])/g, '\\$1')}"`;
 }

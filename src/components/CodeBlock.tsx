@@ -2,36 +2,46 @@ import * as React from "react";
 import {useState, useEffect, useLayoutEffect, JSX, useRef} from "react";
 import * as fs from 'fs/promises';
 import {createPortal} from "react-dom";
-import {isNotebookPaired} from "../utils/helpers";
+import {getAbsolutePath, isNotebookPaired, runJupytext} from "../utils/helpers";
 import RunIcon from "../svg/RunIcon";
 import {ClearIcon} from "../svg/ClearIcon";
 import {LoadIcon} from "../svg/LoadIcon";
 import RunAboveIcon from "../svg/RunAboveIcon";
 import RunBelowIcon from "../svg/RunBelowIcon";
 import ChevronDownIcon from "../svg/ChevronDownIcon";
-import {CodeBlock, CodeExecutionMode, OUTPUTS_UPDATED_EVENT, PythonBlockProps} from "./types";
+import {
+	CodeBlock,
+	CodeExecutionMode,
+	isCodeCell,
+	NotebookCodeBlockProps,
+	OUTPUTS_UPDATED_EVENT,
+	parseNotebook,
+} from "./types";
 import {HighlightedCodeBlock} from "./HighlightedCodeBlock";
+import {sanitizeHTMLToDom} from "obsidian";
+import {languageSupportRegistry} from "../languages/LanguageSupport";
+import {getEditorPositionForCodeOffset} from "../notebook/NotebookCellIndex";
+import {stripAnsiSequences} from "../utils/textOutput";
 
-export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
-																code = "# No code provided",
-																path,
-																index,
-																executor,
+export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
+																		code = "# No code provided",
+																			path,
+															index,
+															sourceLineStart,
+															language = "python",
+															executionEnabled = true,
+															executor,
 																plugin,
 															}) => {
 	const [output, setOutput] = useState<string | JSX.Element>("");
 	const [hasOutput, setHasOutput] = useState<boolean>(false);
 	const [isLoading, setIsLoading] = useState<boolean>(false);
 	const [isPaired, setIsPaired] = useState<boolean>(false);
-	const [blockCount, setBlockCount] = useState<number>(0);
-	const [currentIndex, setCurrentIndex] = useState<number>(index ?? 0);
 	const [isRunMenuOpen, setIsRunMenuOpen] = useState<boolean>(false);
 	const [runMenuPosition, setRunMenuPosition] = useState<{ top: number; left: number } | null>(null);
+	const currentIndex = index ?? 0;
 
 	const activeFile = plugin.app.workspace.getActiveFile();
-	const prevBlockCountRef = useRef<number>(0);
-	const prevCodeRef = useRef<string>(code);
-	const codeBlockRef = useRef<HTMLDivElement>(null);
 	const runMenuRef = useRef<HTMLDivElement>(null);
 	const runDropdownMenuRef = useRef<HTMLDivElement>(null);
 
@@ -46,82 +56,47 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 		}));
 	};
 
-	const handleEditClick = async () => {
-		if (!activeFile || !plugin.app.workspace.activeEditor) return;
-
-		const editor = plugin.app.workspace.activeEditor.editor;
-		if (!editor) return;
-
-		const content = editor.getValue();
-
-		const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-		const codeBlockPattern = new RegExp(`\`\`\`python\\n${escapedCode}(\\n\`\`\`|$)`, 'gm');
-		const match = codeBlockPattern.exec(content);
-
-		if (match) {
-			const startPos = match.index;
-			const endPos = startPos + match[0].length;
-
-			const codeStart = startPos + "```python\n".length;
-			const codeEnd = endPos - (match[0].endsWith("```") ? "\n```".length : 0);
-
-			editor.setSelection(
-				editor.offsetToPos(codeStart),
-				editor.offsetToPos(codeEnd)
-			);
-			editor.focus();
-
-			editor.scrollIntoView({
-				from: editor.offsetToPos(codeStart),
-				to: editor.offsetToPos(codeEnd)
-			}, true);
-		}
-	};
-
-	const getCodeBlocks = async () => {
-		if (!path) return [];
+	const getCodeOffsetAtPoint = (root: HTMLElement, clientX: number, clientY: number): number => {
+		const documentWithCaret = document as Document & {
+			caretPositionFromPoint?: (x: number, y: number) => {offsetNode: Node; offset: number} | null;
+		};
+		const caretPosition = documentWithCaret.caretPositionFromPoint?.(clientX, clientY);
+		const node = caretPosition?.offsetNode;
+		const nodeOffset = caretPosition?.offset;
+		if (!node || nodeOffset === undefined || !root.contains(node)) return 0;
 
 		try {
-			const ipynbPath = path.replace(/\.md$/, ".ipynb");
-			try {
-				await fs.access(ipynbPath);
-			} catch (e) {
-				return [];
-			}
-			const raw = await fs.readFile(ipynbPath, "utf-8");
-			const notebook = JSON.parse(raw);
-			return notebook.cells
-				.filter((c: { cell_type: string }) => c.cell_type === "code")
-				.map((cell: { source: string[] }) => cell.source.join("").trim());
-		} catch (err) {
-			console.error("Error reading notebook:", err);
-			return [];
+			const range = document.createRange();
+			range.selectNodeContents(root);
+			range.setEnd(node, nodeOffset);
+			return range.toString().length;
+		} catch {
+			return 0;
 		}
 	};
 
-	const reindexBlock = async () => {
-		if (!path) return;
+	const handleCodeClick = (event: React.MouseEvent<HTMLDivElement>) => {
+		if (sourceLineStart === undefined || !path) return;
+		const selection = window.getSelection();
+		if (selection && !selection.isCollapsed) return;
 
-		if (!await isNotebookPaired(plugin.app, activeFile)) {
-			return;
-		}
+		const currentFile = plugin.app.workspace.getActiveFile();
+		const editor = plugin.app.workspace.activeEditor?.editor;
+		if (!currentFile || !editor || getAbsolutePath(currentFile) !== path) return;
 
-		const codeBlocks = await getCodeBlocks();
-		const newBlockCount = codeBlocks.length;
-		setBlockCount(newBlockCount);
-
-		const newIndex = codeBlocks.findIndex((blockCode: string) => blockCode === code.trim());
-
-		if (newIndex !== -1 && (newIndex !== currentIndex || newBlockCount !== prevBlockCountRef.current)) {
-			setCurrentIndex(newIndex);
-		}
-
-		prevBlockCountRef.current = newBlockCount;
+		const codeElement = event.currentTarget.querySelector("code");
+		const offset = codeElement
+			? getCodeOffsetAtPoint(codeElement, event.clientX, event.clientY)
+			: 0;
+		const position = getEditorPositionForCodeOffset(code, sourceLineStart, offset);
+		event.preventDefault();
+		event.stopPropagation();
+		editor.setCursor(position);
+		editor.focus();
 	};
 
 	const renderOutputs = async () => {
-		if (!executor || !path || currentIndex === undefined) return;
+		if (!executor || !path || !activeFile || currentIndex === undefined) return;
 
 		try {
 			if (!await isNotebookPaired(plugin.app, activeFile)) {
@@ -133,13 +108,13 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 			const ipynbPath = path.replace(/\.md$/, ".ipynb");
 			try {
 				await fs.access(ipynbPath);
-			} catch (e) {
+			} catch {
 				return;
 			}
 			
 			const raw = await fs.readFile(ipynbPath, "utf-8");
-			const notebook = JSON.parse(raw);
-			const cells = notebook.cells.filter((c: { cell_type: string }) => c.cell_type === "code");
+			const notebook = parseNotebook(raw);
+			const cells = notebook.cells.filter(isCodeCell);
 
 			if (cells.length <= currentIndex || !cells[currentIndex] || !cells[currentIndex].outputs) {
 				setOutput("");
@@ -147,47 +122,69 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 				return;
 			}
 
-			const cellOutputs = cells[currentIndex].outputs;
-			let outputText = "";
-			const outputImages: JSX.Element[] = [];
+			const cellOutputs = cells[currentIndex].outputs ?? [];
+			const outputParts: JSX.Element[] = [];
 			let hasActualOutput = false;
+			const addMimeBundle = (data: Record<string, unknown>, keyPrefix: string) => {
+				if (data["text/html"]) {
+					const html = Array.isArray(data["text/html"]) ? data["text/html"].join("") : String(data["text/html"]);
+					const holder = createDiv();
+					holder.appendChild(sanitizeHTMLToDom(html));
+					outputParts.push(<div key={keyPrefix} dangerouslySetInnerHTML={{__html: holder.innerHTML}}/>);
+					return true;
+				}
+				if (data["image/svg+xml"]) {
+					const svg = Array.isArray(data["image/svg+xml"]) ? data["image/svg+xml"].join("") : String(data["image/svg+xml"]);
+					const holder = createDiv();
+					holder.appendChild(sanitizeHTMLToDom(svg));
+					outputParts.push(<div key={keyPrefix} dangerouslySetInnerHTML={{__html: holder.innerHTML}}/>);
+					return true;
+				}
+				for (const mime of ["image/png", "image/jpeg"]) {
+					if (data[mime]) {
+						outputParts.push(<img key={keyPrefix} src={`data:${mime};base64,${String(data[mime])}`} alt="Cell output"/>);
+						return true;
+					}
+				}
+				for (const mime of ["text/markdown", "text/plain"]) {
+					const mimeValue = data[mime];
+					if (mimeValue !== undefined) {
+						const rawText = Array.isArray(mimeValue) ? mimeValue.join("") : String(mimeValue);
+						const text = stripAnsiSequences(rawText);
+						outputParts.push(<div className="text-output" key={keyPrefix}>{text}</div>);
+						return text.length > 0;
+					}
+				}
+				if (data["application/json"] !== undefined) {
+					outputParts.push(<div className="text-output" key={keyPrefix}>{JSON.stringify(data["application/json"], null, 2)}</div>);
+					return true;
+				}
+				return false;
+			};
 
-			for (const out of cellOutputs) {
+			for (let outputIndex = 0; outputIndex < cellOutputs.length; outputIndex++) {
+				const out = cellOutputs[outputIndex];
 				if (out.output_type === "stream") {
-					const text = Array.isArray(out.text) ? out.text.join("") : out.text;
+					const rawText = Array.isArray(out.text) ? out.text.join("") : out.text ?? "";
+					const text = stripAnsiSequences(rawText);
 					if (text.trim()) {
-						outputText += text;
+						outputParts.push(<div className="text-output" key={`stream-${outputIndex}`}>{text}</div>);
 						hasActualOutput = true;
 					}
-				} else if (out.output_type === "execute_result" && out.data && out.data["text/plain"]) {
-					const text = Array.isArray(out.data["text/plain"])
-						? out.data["text/plain"].join("")
-						: out.data["text/plain"];
-					if (text.trim()) {
-						outputText += text;
-						hasActualOutput = true;
-					}
-				} else if (out.output_type === "display_data" && out.data) {
-					if (out.data["image/png"]) {
-						const imageData = out.data["image/png"];
-						outputImages.push(
-							<img
-								key={outputImages.length}
-								src={`data:image/png;base64,${imageData}`}
-								alt="Cell output"
-								style={{maxWidth: '100%'}}
-							/>
-						);
-						hasActualOutput = true;
-					}
+				} else if ((out.output_type === "execute_result" || out.output_type === "display_data") && out.data) {
+					hasActualOutput = addMimeBundle(out.data, `${out.output_type}-${outputIndex}`) || hasActualOutput;
+				} else if (out.output_type === "error") {
+					const rawTraceback = Array.isArray(out.traceback) && out.traceback.length
+						? out.traceback.join("\n")
+						: `${out.ename || "Error"}: ${out.evalue || ""}`;
+					const traceback = stripAnsiSequences(rawTraceback);
+					outputParts.push(<div className="text-output error-output" key={`error-${outputIndex}`}>{traceback}</div>);
+					hasActualOutput = true;
 				}
 			}
 
 			const outputContent = (
-				<>
-					{outputText && <div className="text-output">{outputText}</div>}
-					{outputImages}
-				</>
+				<>{outputParts}</>
 			);
 
 			setOutput(outputContent);
@@ -218,7 +215,7 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 					return;
 				}
 
-				setTimeout(checkSync, SYNC_CHECK_INTERVAL);
+				window.setTimeout(checkSync, SYNC_CHECK_INTERVAL);
 			};
 
 			checkSync();
@@ -241,7 +238,8 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 
 			const codeBlock: CodeBlock = {
 				code: code,
-				cellIndex: currentIndex
+				cellIndex: currentIndex,
+				language,
 			};
 
 			if (!activeFile) {
@@ -251,39 +249,36 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 
 			await executor.executeCodeBlock(codeBlock, mode);
 
-			await reindexBlock();
-
-			setTimeout(async () => {
-				await renderOutputs();
-				notifyOutputsUpdated();
-				try {
-					await fs.utimes(path, new Date(), new Date());
-				} catch(e) {
-					// ignore
-				}
-				/* when the output is pushed to the .ipynb file, the modification time 
-				of it becomes more recent than the markdown file's. this causes the sync
-				to be biased towards the .ipynb file which in reality is older than the
-				markdown file. to mitigate, the markdown file is force modified after the 
-				output is pushed to the .ipynb file. */
-				setIsLoading(false);
-			}, 100);
+			await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
+			await renderOutputs();
+			notifyOutputsUpdated();
+			try {
+				await fs.utimes(path, new Date(), new Date());
+			} catch {
+				// The timestamp adjustment is best-effort.
+			}
+			/* when the output is pushed to the .ipynb file, the modification time
+			of it becomes more recent than the markdown file's. this causes the sync
+			to be biased towards the .ipynb file which in reality is older than the
+			markdown file. to mitigate, the markdown file is force modified after the
+			output is pushed to the .ipynb file. */
+			setIsLoading(false);
 		} catch (err) {
 			console.error("Error executing code:", err);
 			setIsLoading(false);
 		}
 	};
 
-	const handleRun = async () => {
-		await runCodeBlock("cell");
+	const handleRun = () => {
+		void runCodeBlock("cell");
 	};
 
-	const handleRunAbove = async () => {
-		await runCodeBlock("above");
+	const handleRunAbove = () => {
+		void runCodeBlock("above");
 	};
 
-	const handleRunCellAndBelow = async () => {
-		await runCodeBlock("cell-and-below");
+	const handleRunCellAndBelow = () => {
+		void runCodeBlock("cell-and-below");
 	};
 
 	const handleToggleRunMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -292,76 +287,72 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 		setIsRunMenuOpen((value) => !value);
 	};
 
-	const handleClear = async () => {
+	const clearOutput = async () => {
 		if (!path || currentIndex === undefined) return;
 
 		setIsRunMenuOpen(false);
+		setOutput("");
+		setHasOutput(false);
 
 		try {
 			const ipynbPath = path.replace(/\.md$/, ".ipynb");
 
 			try {
 				await fs.access(ipynbPath);
-			} catch (e) {
+			} catch {
+				await renderOutputs();
 				return;
 			}
 
 			const raw = await fs.readFile(ipynbPath, "utf-8");
-			const notebook = JSON.parse(raw);
-			const cells = notebook.cells.filter((c: { cell_type: string }) => c.cell_type === "code");
+			const notebook = parseNotebook(raw);
+			const cells = notebook.cells.filter(isCodeCell);
 
 			if (cells.length <= currentIndex || !cells[currentIndex]) {
+				await renderOutputs();
 				return;
 			}
 
 			cells[currentIndex].outputs = [];
+			cells[currentIndex].execution_count = null;
 			await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
-			setOutput("");
-			setHasOutput(false);
+			await runJupytext(plugin.settings.toolingPython, ["--sync", ipynbPath]);
 			notifyOutputsUpdated();
 		} catch (err) {
 			console.error("Error clearing outputs:", err);
+			await renderOutputs();
 		}
 	};
 
-	useEffect(() => {
-		const interval = setInterval(() => {
-			if (code !== prevCodeRef.current || currentIndex === undefined || currentIndex >= blockCount) {
-				reindexBlock();
-				prevCodeRef.current = code;
-			}
-		}, 2000);
-
-		return () => clearInterval(interval);
-	}, [path, code, currentIndex, blockCount]);
+	const handleClear = () => {
+		void clearOutput();
+	};
 
 	useEffect(() => {
-		reindexBlock();
-	}, [path, code]);
+		if (executionEnabled) void renderOutputs();
+	}, [path, currentIndex, executionEnabled]);
 
 	useEffect(() => {
-		renderOutputs();
-	}, [currentIndex]);
+		if (!executionEnabled) return;
 
-	useEffect(() => {
 		const checkPairing = async () => {
 			if (activeFile) {
 				const paired = await isNotebookPaired(plugin.app, activeFile);
 				setIsPaired(paired);
 			}
 		};
-		checkPairing();
+		void checkPairing();
 
-		const eventRef = plugin.app.metadataCache.on("changed", (file: { path: any; }) => {
+		const eventRef = plugin.app.metadataCache.on("changed", (file) => {
 			if (activeFile && file.path === activeFile.path) {
-				checkPairing();
+				void checkPairing();
 			}
 		});
 
 		return () => {
 			plugin.app.metadataCache.offref(eventRef);
 		};
-	}, [activeFile]);
+	}, [activeFile, executionEnabled]);
 
 	useEffect(() => {
 		const handleDocumentMouseDown = (event: MouseEvent) => {
@@ -433,13 +424,14 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 	}, [isRunMenuOpen]);
 
 	useEffect(() => {
+		if (!executionEnabled) return;
+
 		const handleOutputsUpdated = (event: Event) => {
 			const customEvent = event as CustomEvent<{path?: string}>;
 			if (customEvent.detail?.path && customEvent.detail.path !== path) {
 				return;
 			}
 
-			void reindexBlock();
 			void renderOutputs();
 		};
 
@@ -448,12 +440,12 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 		return () => {
 			document.removeEventListener(OUTPUTS_UPDATED_EVENT, handleOutputsUpdated);
 		};
-	}, [path, code, currentIndex, blockCount, activeFile]);
+	}, [path, code, currentIndex, activeFile, executionEnabled]);
 
 	return (
 		<div className="code-container">
-			<div className="code-top-bar">
-				<div className="code-buttons">
+			<div className={`code-top-bar${executionEnabled ? "" : " code-top-bar-static"}`}>
+				{executionEnabled && <div className="code-buttons">
 					<div
 						className={`run-action-group${isRunMenuOpen ? " run-action-group-open" : ""}`}
 						ref={runMenuRef}
@@ -520,26 +512,23 @@ export const PythonCodeBlock: React.FC<PythonBlockProps> = ({
 					>
 						<ClearIcon className="icon grey-icon"/>
 					</button>
-				</div>
+				</div>}
 				<div className="code-lang-label">
-					Python
+					{languageSupportRegistry.getDisplayName(language)}
 				</div>
 			</div>
 
-			<div
-				ref={codeBlockRef}
-				onClick={handleEditClick}
-				style={{cursor: 'text'}}
-			>
+				<div className="code-source" onClick={handleCodeClick}>
 				<HighlightedCodeBlock
 					code={code}
+					language={language}
 				/>
 			</div>
 
-			{isPaired && hasOutput && (
-				<pre className="code-output">
+			{executionEnabled && isPaired && hasOutput && (
+				<div className="code-output">
                     {output}
-                </pre>
+				</div>
 			)}
 		</div>
 	);

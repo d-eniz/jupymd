@@ -1,5 +1,8 @@
 import {App, FuzzyMatch, FuzzySuggestModal, Modal, Notice, Setting} from "obsidian";
-import {discoverKernels, KernelInfo} from "../utils/kernelDiscovery";
+import {
+	discoverPythonEnvironments,
+	PythonEnvironmentInfo,
+} from "../utils/pythonEnvironmentDiscovery";
 import {validatePythonPath} from "../utils/pythonPathUtils";
 
 export type CreateVenvResult = {
@@ -15,7 +18,7 @@ type CustomPathOption = {
 	isCustomPath: true;
 };
 
-type CreateVenvInterpreterOption = KernelInfo | CustomPathOption;
+type CreateVenvInterpreterOption = PythonEnvironmentInfo | CustomPathOption;
 
 function isCustomPathOption(option: CreateVenvInterpreterOption): option is CustomPathOption {
 	return "isCustomPath" in option;
@@ -118,7 +121,7 @@ class VenvNameModal extends Modal {
 export class CreateVenvModal extends FuzzySuggestModal<CreateVenvInterpreterOption> {
 	private readonly initialPythonPath: string;
 	private readonly initialEnvName = ".jupymd";
-	private availableKernels: KernelInfo[] = [];
+	private availableKernels: PythonEnvironmentInfo[] = [];
 	private isChoosingInterpreter = false;
 	private resolver: ((result: CreateVenvResult | null) => void) | null = null;
 
@@ -140,8 +143,8 @@ export class CreateVenvModal extends FuzzySuggestModal<CreateVenvInterpreterOpti
 		});
 	}
 
-	onOpen() {
-		super.onOpen();
+	async onOpen(): Promise<void> {
+		await super.onOpen();
 		this.addLoadingHint();
 		this.emptyStateText = "No Python interpreters available for environment creation.";
 		void this.loadInterpreterOptions();
@@ -239,7 +242,11 @@ export class CreateVenvModal extends FuzzySuggestModal<CreateVenvInterpreterOpti
 		bottomRow.createSpan({cls: "kernel-suggestion-path", text: item.path});
 	}
 
-	async onChooseItem(item: CreateVenvInterpreterOption) {
+	onChooseItem(item: CreateVenvInterpreterOption): void {
+		void this.chooseItem(item);
+	}
+
+	private async chooseItem(item: CreateVenvInterpreterOption): Promise<void> {
 		if (isCustomPathOption(item)) {
 			const valid = await validatePythonPath(item.path);
 			if (!valid) {
@@ -270,7 +277,7 @@ export class CreateVenvModal extends FuzzySuggestModal<CreateVenvInterpreterOpti
 	private addLoadingHint() {
 		const promptEl = this.containerEl.querySelector(".prompt-results");
 		if (promptEl) {
-			const hint = promptEl.createEl("div", {
+			const hint = promptEl.createDiv({
 				cls: "suggestion-empty",
 				text: "Discovering Python interpreters…",
 			});
@@ -285,7 +292,7 @@ export class CreateVenvModal extends FuzzySuggestModal<CreateVenvInterpreterOpti
 
 	private async loadInterpreterOptions() {
 		try {
-			this.availableKernels = (await discoverKernels(this.app))
+			this.availableKernels = (await discoverPythonEnvironments(this.app))
 				.filter((kernel) => kernel.type === "system");
 		} catch (error) {
 			console.error("Failed to discover interpreters for venv creation:", error);

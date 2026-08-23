@@ -1,24 +1,23 @@
-import {App, Notice, Platform} from "obsidian";
+import {App, FileSystemAdapter, Notice, Platform} from "obsidian";
 import * as path from "path";
 import * as fs from "fs/promises";
-import {exec} from "child_process";
+import {execFile} from "child_process";
 import {promisify} from "util";
-import { installLibs } from "./helpers";
-import JupyMDPlugin from "../main";
+import {getErrorMessage, installLibs} from "./helpers";
 import {getDefaultPythonPath} from "./pythonPathUtils";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export async function runQuickSetup(
 	app: App,
-	plugin: JupyMDPlugin,
 	basePythonPath?: string,
-	envNameInput?: string
-): Promise<boolean> {
-	const adapter = app.vault.adapter as any;
-	if (!adapter.getBasePath) {
+	envNameInput?: string,
+	packages = "ipykernel"
+): Promise<string | null> {
+	const adapter = app.vault.adapter;
+	if (!(adapter instanceof FileSystemAdapter)) {
 		new Notice("Quick setup is only supported on local file systems.");
-		return false;
+		return null;
 	}
 
 	const basePath = adapter.getBasePath();
@@ -30,10 +29,9 @@ export async function runQuickSetup(
 
 	try {
 		const basePython = basePythonPath?.trim()
-			|| plugin.settings.pythonInterpreter
 			|| getDefaultPythonPath();
 
-		await execAsync(`"${basePython}" -m venv "${venvPath}"`);
+		await execFileAsync(basePython, ["-m", "venv", venvPath]);
 
 		const venvPythonPath = Platform.isWin
 			? path.join(venvPath, "Scripts", "python.exe")
@@ -45,16 +43,18 @@ export async function runQuickSetup(
 			throw new Error("Could not locate Python in the newly created virtual environment.");
 		}
 
-		new Notice("Installing libraries...");
-		await installLibs(venvPythonPath, "jupytext matplotlib")
-
-		await plugin.updateInterpreter(venvPythonPath);
+		if (packages.trim()) {
+			new Notice("Installing libraries...");
+			if (!await installLibs(venvPythonPath, packages)) {
+				throw new Error(`Failed to install required packages: ${packages}`);
+			}
+		}
 
 		new Notice(`Quick setup complete! Virtual environment '${envName}' created successfully.`);
-		return true;
-	} catch (error: any) {
+		return venvPythonPath;
+	} catch (error: unknown) {
 		console.error("Quick setup failed:", error);
-		new Notice(`Quick setup failed: ${error.message || error}`);
-		return false;
+		new Notice(`Quick setup failed: ${getErrorMessage(error)}`);
+		return null;
 	}
 }

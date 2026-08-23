@@ -3,7 +3,7 @@
 	"name": "JupyMD",
 	"version": "1.7.0",
 	"minAppVersion": "1.8.4",
-	"description": "Use Jupyter notebooks in Obsidian.",
+	"description": "Use Jupyter notebooks within your vault.",
 	"author": "Deniz Terzioglu",
 	"authorUrl": "https://d-eniz.github.io/",
 	"isDesktopOnly": true
