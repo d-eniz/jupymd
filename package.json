@@ -1,6 +1,6 @@
 {
 	"name": "jupymd",
-	"version": "2.0.0",
+	"version": "2.0.1",
 	"description": "Use Jupyter notebooks in Obsidian.",
 	"main": "main.js",
 	"scripts": {
