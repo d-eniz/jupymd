@@ -11,7 +11,7 @@ Enables Jupyter notebook functionality in Obsidian. Make markdown files behave l
 
 With JupyMD you can:
 
-- Run code
+- Run code in a variety of languages
 - Create plots with `matplotlib`
 - Conduct data analysis with `pandas` dataframes
 - Build machine learning models with `sklearn` and `pytorch`
@@ -33,16 +33,16 @@ With JupyMD you can:
 
 JupyMD is designed to be a feature rich Jupyter notebook editor inside of Obsidian, similar to VSCode's Jupyter notebook functionality and Jupyter Lab. Some of its features include:
 
-- **Multiple Programming Languages** – Built-in support for Python, Julia, R, JavaScript, TypeScript, Bash, and Rust. Additional languages can also work through compatible Jupyter kernels.
+- **Multiple Programming Languages:** Built-in support for Python, Julia, R, JavaScript, TypeScript, Bash, and Rust. Additional languages can also work through compatible Jupyter kernels. Supports external libraries.
 - **Notebook Conversion**
     - Convert existing notes in Obsidian to Jupyter notebooks
     - Convert existing Jupyter notebooks to Markdown notes
-- **Bidirectional Updates** – Changes in Obsidian or Jupyter automatically sync between `.md` and `.ipynb` files
-- **Execute Code** – Run code blocks in Obsidian with output captured below each block, regardless of viewing mode
-- **Persistent Execution Environment** – Variables and imports defined in one code block are remembered by the following code blocks
-- **True Jupyter Sync** – Executed code blocks automatically update output metadata in linked `.ipynb` file
-- **Persistent Output Rendering** – Executed code outputs stay visible after restart and sync to `.ipynb` file
-- **Rich Output** – Support for `matplotlib` plots and `pandas` dataframe outputs
+- **Bidirectional Updates:** Changes in Obsidian or Jupyter automatically sync between `.md` and `.ipynb` files
+- **Execute Code:** Run code blocks in Obsidian with output captured below each block, regardless of viewing mode
+- **Persistent Execution Environment:** Variables and imports defined in one code block are remembered by the following code blocks
+- **True Jupyter Sync:** Executed code blocks automatically update output metadata in linked `.ipynb` file
+- **Persistent Output Rendering:** Executed code outputs stay visible after restart and sync to `.ipynb` file
+- **Rich Output:** Support for image and dataframe outputs, magic commands
 
 ## Prerequisites
 
@@ -80,7 +80,7 @@ To set up JupyMD, configure a Python tooling environment from the settings. This
 You can transform your note into a Jupyter notebook in two ways:
 
 - Pressing "run cell" on a code block
-- Running the "JupyMD: Create notebook from note" command
+- Running the `JupyMD: Create notebook from note` command
 
 This will:
 
