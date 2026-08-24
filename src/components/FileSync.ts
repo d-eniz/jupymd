@@ -60,7 +60,7 @@ class NotebookFileSelectorModal extends FuzzySuggestModal<TFile> {
 
 export class FileSync {
 	private readonly pythonPath: string;
-	private lastSyncTime: number = 0;
+	private lastSyncTime = 0;
 	private syncDebounceTimeout: number | null = null;
 	private readonly SYNC_DEADTIME_MS = 1500;
 	private readonly DEBOUNCE_DELAY_MS = 500;
@@ -140,19 +140,14 @@ export class FileSync {
 				? `Legacy notebook upgraded to format v4; note created and paired: ${mdPath}`
 				: `Note created and paired: ${mdPath}`);
 
-			const mdRelative = this.app.vault.getFiles().find(
-				f => getAbsolutePath(f) === mdPath
-			);
-
-			if (mdRelative) {
-				void this.app.workspace.openLinkText(mdRelative.path, '', true);
-			}
+			const mdRelativePath = file.path.replace(/\.ipynb$/, ".md");
+			void this.app.workspace.openLinkText(mdRelativePath, "", true);
 		} catch (error: unknown) {
 			new Notice(`Failed to convert notebook: ${getErrorMessage(error)}`);
 		}
 	}
 
-	async createNotebook(kernel: KernelConnection, refreshView: boolean = true): Promise<boolean> {
+	async createNotebook(kernel: KernelConnection, refreshView = true): Promise<boolean> {
 		const activeFile = this.app.workspace.getActiveFile();
 		if (!activeFile) {
 			new Notice("No active note found.");
