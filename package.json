@@ -5,7 +5,7 @@
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
-		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production && node scripts/verify-release-bundle.mjs",
 		"watch": "tsc -w -p .",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"prepare": "husky"
@@ -23,8 +23,8 @@
 		"@commitlint/cli": "^20.5.0",
 		"@commitlint/config-conventional": "^20.5.0",
 		"@types/node": "^18.0.0",
-		"@types/react": "^19.1.6",
-		"@types/react-dom": "^19.1.5",
+		"@types/react": "^18.3.31",
+		"@types/react-dom": "^18.3.7",
 		"@types/react-syntax-highlighter": "^15.5.13",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
@@ -43,8 +43,8 @@
 		"@uiw/react-codemirror": "^4.23.12",
 		"highlight.js": "^11.11.1",
 		"prismjs": "^1.30.0",
-		"react": "^19.1.0",
-		"react-dom": "^19.1.0",
+		"react": "^18.3.1",
+		"react-dom": "^18.3.1",
 		"react-syntax-highlighter": "^16.1.1"
 	}
 }
