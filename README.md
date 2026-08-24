@@ -98,17 +98,18 @@ Move your Jupyter notebook to your vault. Executing the following command will l
 
 This will create a Markdown note (`.md`) with the same file name as the notebook in the same directory where the Jupyter notebook is.
 
-## Security & Privacy Notice
+## Local access and security
 
-JupyMD may access directories outside your Obsidian vault to detect available kernels and interpreters.
+JupyMD is a desktop-only plugin because local Jupyter integration requires capabilities beyond the Obsidian vault API. The plugin uses them for the following limited purposes:
 
-This includes:
+- **Process execution:** JupyMD starts the selected Python tooling environment, Jupytext, Jupyter kernels, and a user-configured external notebook editor. Commands are launched directly with argument arrays rather than evaluated through a command shell. Package installation runs only after explicit user confirmation.
+- **Filesystem access:** JupyMD reads and writes paired `.ipynb` files, stores plugin-managed kernelspecs below the vault configuration directory, detects virtual environments in the vault root, and discovers installed interpreters and kernels in their standard system locations (including pyenv directories).
+- **Vault file listing:** The "Create note from Jupyter notebook" command lists `.ipynb` files so the user can select one to convert. JupyMD does not enumerate the vault during normal code execution.
+- **Clipboard writes:** Holding Shift while clicking the kernel status copies the selected interpreter or kernel executable path. JupyMD does not read the clipboard.
 
-- System-wide Python installations (e.g. `/usr/bin/python`, `python3`)
-- Virtual environments located inside your vault (e.g. `.venv`)
-- Optional pyenv-managed Python versions (e.g. `~/.pyenv/versions`)
+Code executed in a notebook has the same operating-system permissions as Obsidian. Only run notebooks and select kernels that you trust.
 
-This access is required to automatically discover and list available Python environments and allow users to select an interpreter for code execution. JupyMD does not transmit any data over the network or modify files outside your vault.
+JupyMD does not include telemetry and does not make its own network requests. If the user confirms a package installation, the selected package manager may contact its configured package indexes.
 
 ## Contributing
 
