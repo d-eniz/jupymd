@@ -25,7 +25,6 @@ async function probeRuntimeVersion(kernel: KernelConnection): Promise<string | n
 
 		try {
 			const {stdout, stderr} = await execFileAsync(executable, probe.args, {
-				env: {...process.env, ...(kernel.spec.env || {})},
 				timeout: 3000,
 			});
 			const match = `${stdout}\n${stderr}`.match(probe.pattern);

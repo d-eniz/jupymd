@@ -14,6 +14,11 @@ from jupyter_client.kernelspec import KernelSpecManager
 sessions = {}
 sessions_lock = threading.RLock()
 output_lock = threading.Lock()
+managed_kernels_dir = (
+    os.path.realpath(os.path.join(sys.argv[1], "kernels"))
+    if len(sys.argv) > 1 and sys.argv[1]
+    else None
+)
 
 
 def emit(payload):
@@ -23,7 +28,10 @@ def emit(payload):
 
 
 def kernel_spec_manager():
-    return KernelSpecManager()
+    manager = KernelSpecManager()
+    if managed_kernels_dir and managed_kernels_dir not in manager.kernel_dirs:
+        manager.kernel_dirs.insert(0, managed_kernels_dir)
+    return manager
 
 
 def list_kernels():

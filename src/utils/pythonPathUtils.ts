@@ -1,4 +1,5 @@
 import {execFile} from "child_process";
+import {Platform} from "obsidian";
 
 export async function validatePythonPath(pythonPath?: string): Promise<boolean> {
     if (!pythonPath?.trim()) return false;
@@ -11,7 +12,7 @@ export async function validatePythonPath(pythonPath?: string): Promise<boolean> 
 }
 
 export function getDefaultPythonPath(): string {
-    if (process.platform === "win32") {
+    if (Platform.isWin) {
         return "python";
     }
     return "python3";  // macOS and Linux typically use 'python3'

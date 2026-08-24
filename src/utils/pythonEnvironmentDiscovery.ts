@@ -69,18 +69,14 @@ function getVenvPythonPath(envDir: string): string {
 		: path.join(envDir, "bin", "python");
 }
 
-function getPyenvRoots(): string[] {
-	const homeDir = process.env.HOME || process.env.USERPROFILE || "";
-	const roots = Platform.isWin
-		? [
-			process.env.PYENV_ROOT || "",
-			path.join(homeDir, ".pyenv", "pyenv-win"),
-			path.join(homeDir, ".pyenv"),
-		]
-		: [
-			process.env.PYENV_ROOT || "",
-			path.join(homeDir, ".pyenv"),
-		];
+async function getPyenvRoots(): Promise<string[]> {
+	const roots: string[] = [];
+	try {
+		const {stdout} = await execFileAsync("pyenv", ["root"], {timeout: 3000});
+		if (stdout.trim()) roots.unshift(stdout.trim());
+	} catch {
+		// pyenv may not be installed or available on PATH.
+	}
 
 	return Array.from(new Set(roots.filter(Boolean)));
 }
@@ -91,10 +87,10 @@ function getPyenvVersionPythonPath(versionDir: string): string {
 		: path.join(versionDir, "bin", "python");
 }
 
-function getPyenvInterpreterCandidates(): string[] {
+function getPyenvInterpreterCandidates(pyenvRoots: string[]): string[] {
 	const candidates: string[] = [];
 
-	for (const pyenvRoot of getPyenvRoots()) {
+	for (const pyenvRoot of pyenvRoots) {
 		candidates.push(
 			path.join(pyenvRoot, "shims", "python"),
 			path.join(pyenvRoot, "shims", "python3")
@@ -117,10 +113,10 @@ function getPyenvInterpreterCandidates(): string[] {
 	return Array.from(new Set(candidates));
 }
 
-function isPyenvInterpreterCandidate(candidate: string): boolean {
+function isPyenvInterpreterCandidate(candidate: string, pyenvRoots: string[]): boolean {
 	if (!path.isAbsolute(candidate)) return false;
 
-	return getPyenvRoots().some((pyenvRoot) => {
+	return pyenvRoots.some((pyenvRoot) => {
 		const shimsDir = path.join(pyenvRoot, "shims");
 		const versionsDir = path.join(pyenvRoot, "versions");
 		return candidate.startsWith(`${shimsDir}${path.sep}`) || candidate.startsWith(`${versionsDir}${path.sep}`);
@@ -149,14 +145,24 @@ async function discoverVenvs(app: App): Promise<PythonEnvironmentInfo[]> {
 	return results;
 }
 
-function getGlobalInterpreterCandidates(): string[] {
+async function getWindowsInterpreterCandidates(): Promise<string[]> {
+	const candidates = ["python", "python3", "py"];
+	try {
+		const {stdout} = await execFileAsync("py", ["-0p"], {timeout: 3000});
+		for (const line of stdout.split(/\r?\n/)) {
+			const match = line.match(/([a-z]:\\.*\.exe)\s*$/i);
+			if (match?.[1]) candidates.push(match[1]);
+		}
+	} catch {
+		// The standard Windows Python launcher may not be installed.
+	}
+
+	return candidates;
+}
+
+async function getGlobalInterpreterCandidates(pyenvRoots: string[]): Promise<string[]> {
 	const candidates = Platform.isWin
-		? [
-			"python",
-			"python3",
-			path.join(process.env.LOCALAPPDATA || "", "Programs", "Python", "Python313", "python.exe"),
-			path.join(process.env.LOCALAPPDATA || "", "Programs", "Python", "Python312", "python.exe"),
-		]
+		? await getWindowsInterpreterCandidates()
 		: [
 			"python3",
 			"python",
@@ -169,14 +175,15 @@ function getGlobalInterpreterCandidates(): string[] {
 			"/opt/homebrew/bin/python",
 		];
 
-	return Array.from(new Set([...candidates, ...getPyenvInterpreterCandidates()]));
+	return Array.from(new Set([...candidates, ...getPyenvInterpreterCandidates(pyenvRoots)]));
 }
 
 async function discoverGlobalInterpreters(): Promise<PythonEnvironmentInfo[]> {
 	const results: PythonEnvironmentInfo[] = [];
-	for (const candidate of getGlobalInterpreterCandidates()) {
+	const pyenvRoots = await getPyenvRoots();
+	for (const candidate of await getGlobalInterpreterCandidates(pyenvRoots)) {
 		const label = path.isAbsolute(candidate) ? path.basename(candidate) : candidate;
-		const source = isPyenvInterpreterCandidate(candidate) ? "pyenv" : undefined;
+		const source = isPyenvInterpreterCandidate(candidate, pyenvRoots) ? "pyenv" : undefined;
 		const result = await probeInterpreter(candidate, label, "system", source);
 		if (result) results.push(result);
 	}

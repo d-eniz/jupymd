@@ -1,5 +1,4 @@
 import {spawn} from "child_process";
-import * as path from "path";
 import {KernelConnection, KernelExecutionResult} from "../kernels/types";
 import pythonBridgeSource from "./pythonBridge.py";
 
@@ -141,20 +140,16 @@ export class JupyterBridgeClient {
 			return this.readyPromise;
 		}
 
-		const env = {...process.env};
-		// The bridge protocol is UTF-8; do not inherit legacy Windows code pages.
-		env.PYTHONIOENCODING = "utf-8";
-		env.JUPYTER_PATH = [this.jupyterDataDir, env.JUPYTER_PATH || ""]
-			.filter(Boolean)
-			.join(path.delimiter);
-
 		this.readyPromise = new Promise<void>((resolve, reject) => {
 			this.readyResolve = resolve;
 			this.readyReject = reject;
 		});
 
-		const bridgeProcess: BridgeProcess = spawn(this.toolingPython, ["-u", "-c", pythonBridgeSource], {
-			env,
+		const bridgeProcess: BridgeProcess = spawn(this.toolingPython, [
+			"-X", "utf8",
+			"-u", "-c", pythonBridgeSource,
+			this.jupyterDataDir,
+		], {
 			stdio: ["pipe", "pipe", "pipe"],
 		});
 		this.process = bridgeProcess;

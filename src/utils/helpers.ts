@@ -24,21 +24,21 @@ export function getErrorMessage(error: unknown): string {
 }
 
 export async function runJupytext(pythonPath: string, args: string[]): Promise<void> {
-		return new Promise((resolve, reject) => {
-			execFile(
-				pythonPath,
-				["-m", "jupytext", ...args],
-				(error, stdout, stderr) => {
-					if (error) {
-						console.error(stderr || error.message);
-						reject(error instanceof Error ? error : new Error(String(error)));
-						return;
-					}
-					resolve();
+	return new Promise((resolve, reject) => {
+		execFile(
+			pythonPath,
+			["-X", "utf8", "-m", "jupytext", ...args],
+			(error, stdout, stderr) => {
+				if (error) {
+					console.error(stderr || error.message);
+					reject(error instanceof Error ? error : new Error(String(error)));
+					return;
 				}
-			);
-		});
-	}
+				resolve();
+			}
+		);
+	});
+}
 
 export async function upgradeLegacyNotebook(
 	pythonPath: string,
@@ -51,8 +51,7 @@ export async function upgradeLegacyNotebook(
 	try {
 		await execFileAsync(
 			pythonPath,
-			["-c", upgradeNotebookSource, notebookPath],
-			{env: {...process.env, PYTHONIOENCODING: "UTF-8"}}
+			["-X", "utf8", "-c", upgradeNotebookSource, notebookPath]
 		);
 		return true;
 	} catch (error: unknown) {
