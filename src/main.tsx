@@ -261,12 +261,19 @@ export default class JupyMDPlugin extends Plugin {
 				createRoot(reactRoot).render(<HighlightedCodeBlock code={source} language={normalizedLanguage}/>);
 				return;
 			}
+			const getCurrentIndex = async () => {
+				const currentSectionInfo = ctx.getSectionInfo(el);
+				if (!currentSectionInfo) return null;
+				const currentFileContent = await this.app.vault.read(sourceFile);
+				return getExecutableCellIndex(currentFileContent, currentSectionInfo.lineStart, kernelLanguage);
+			};
 
 			createRoot(reactRoot).render(
 				<NotebookCodeBlock
 					code={source}
 					path={filePath}
 					index={index}
+					getCurrentIndex={getCurrentIndex}
 					sourceLineStart={sectionInfo.lineStart}
 					language={normalizedLanguage}
 					executor={this.executor}

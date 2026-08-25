@@ -27,6 +27,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 																		code = "# No code provided",
 																			path,
 															index,
+															getCurrentIndex,
 															sourceLineStart,
 															language = "python",
 															executionEnabled = true,
@@ -47,6 +48,10 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 
 	const SYNC_CHECK_INTERVAL = 100; // ms
 	const MAX_SYNC_WAIT_TIME = 5000;
+	const resolveCurrentIndex = async (): Promise<number> => {
+		const latestIndex = await getCurrentIndex?.();
+		return latestIndex ?? currentIndex;
+	};
 
 	const notifyOutputsUpdated = () => {
 		if (!path) return;
@@ -95,10 +100,12 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 		editor.focus();
 	};
 
-	const renderOutputs = async () => {
+	const renderOutputs = async (cellIndex?: number) => {
 		if (!executor || !path || !activeFile || currentIndex === undefined) return;
 
 		try {
+			await waitForSyncUnblocked();
+			const resolvedIndex = cellIndex ?? await resolveCurrentIndex();
 			if (!await isNotebookPaired(plugin.app, activeFile)) {
 				setOutput("");
 				setHasOutput(false);
@@ -115,14 +122,16 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 			const raw = await fs.readFile(ipynbPath, "utf-8");
 			const notebook = parseNotebook(raw);
 			const cells = notebook.cells.filter(isCodeCell);
+			const cell = cells[resolvedIndex];
+			const cellSource = Array.isArray(cell?.source) ? cell.source.join("") : cell?.source ?? "";
 
-			if (cells.length <= currentIndex || !cells[currentIndex] || !cells[currentIndex].outputs) {
+			if (!cell || cellSource.trim() !== code.trim() || !cell.outputs) {
 				setOutput("");
 				setHasOutput(false);
 				return;
 			}
 
-			const cellOutputs = cells[currentIndex].outputs ?? [];
+			const cellOutputs = cell.outputs;
 			const outputParts: JSX.Element[] = [];
 			let hasActualOutput = false;
 			const addMimeBundle = (data: Record<string, unknown>, keyPrefix: string) => {
@@ -236,9 +245,10 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 				console.warn("Code execution proceeding despite sync being blocked (timeout reached)");
 			}
 
+			const cellIndex = await resolveCurrentIndex();
 			const codeBlock: CodeBlock = {
 				code: code,
-				cellIndex: currentIndex,
+				cellIndex,
 				language,
 			};
 
@@ -250,7 +260,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 			await executor.executeCodeBlock(codeBlock, mode);
 
 			await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
-			await renderOutputs();
+			await renderOutputs(cellIndex);
 			notifyOutputsUpdated();
 			try {
 				await fs.utimes(path, new Date(), new Date());
@@ -295,6 +305,8 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 		setHasOutput(false);
 
 		try {
+			await waitForSyncUnblocked();
+			const cellIndex = await resolveCurrentIndex();
 			const ipynbPath = path.replace(/\.md$/, ".ipynb");
 
 			try {
@@ -307,14 +319,16 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 			const raw = await fs.readFile(ipynbPath, "utf-8");
 			const notebook = parseNotebook(raw);
 			const cells = notebook.cells.filter(isCodeCell);
+			const cell = cells[cellIndex];
+			const cellSource = Array.isArray(cell?.source) ? cell.source.join("") : cell?.source ?? "";
 
-			if (cells.length <= currentIndex || !cells[currentIndex]) {
+			if (!cell || cellSource.trim() !== code.trim()) {
 				await renderOutputs();
 				return;
 			}
 
-			cells[currentIndex].outputs = [];
-			cells[currentIndex].execution_count = null;
+			cell.outputs = [];
+			cell.execution_count = null;
 			await fs.writeFile(ipynbPath, JSON.stringify(notebook, null, 2));
 			await runJupytext(plugin.settings.toolingPython, ["--sync", ipynbPath]);
 			notifyOutputsUpdated();

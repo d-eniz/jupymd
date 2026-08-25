@@ -34,6 +34,7 @@ export type NotebookCodeBlockProps = {
 	code?: string;
 	path?: string;
 	index?: number;
+	getCurrentIndex?: () => Promise<number | null>;
 	sourceLineStart?: number;
 	language?: string;
 	executionEnabled?: boolean;
