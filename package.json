@@ -14,7 +14,8 @@
 		"test:integration": "node test/run.mjs integration",
 		"test:build": "node test/build-plugin.mjs",
 		"test:e2e": "npm run test:build && wdio run ./wdio.conf.mts",
-		"test:typecheck": "tsc --noEmit -p test/tsconfig.json"
+		"test:typecheck": "tsc --noEmit -p test/tsconfig.json",
+		"test:regressions": "node test/run.mjs regressions"
 	},
 	"keywords": [
 		"obsidian",
