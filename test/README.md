@@ -23,11 +23,6 @@ Desktop tests use WebdriverIO with `wdio-obsidian-service`, download Obsidian au
 | `npm run test:integration` | Real Python, Jupytext, Jupyter and executor tests |
 | `npm run test:e2e` | End-user workflows in Obsidian |
 | `npm run test:typecheck` | Test and configuration type checks |
-| `npm run test:regressions` | Three known synchronization failures |
-
-The regression command currently exits nonzero for known bugs and is excluded from `npm test`. Move each case into the regular suite when fixed.
-
-Husky runs typechecking and unit tests before each commit (about 3 seconds locally). Commitlint checks the commit message.
 
 Run selected tests:
 
