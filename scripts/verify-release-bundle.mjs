@@ -1,6 +1,6 @@
 import {readFile} from "node:fs/promises";
 
-const bundle = await readFile(new URL("../main.js", import.meta.url), "utf8");
+const bundle = await readFile(process.argv[2] || new URL("../main.js", import.meta.url), "utf8");
 const dynamicScriptCreation = /\.createElement\(\s*["']script["']/g;
 const environmentAccess = /process\.env(?:\.|\[)/g;
 const identityApiAccess = /\.(?:hostname|userInfo|networkInterfaces|homedir)\(/g;
