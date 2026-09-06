@@ -9,10 +9,12 @@
 		"watch": "tsc -w -p .",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"prepare": "husky",
-		"test": "npm run test:typecheck && npm run test:unit && npm run test:integration",
+		"test": "npm run test:typecheck && npm run test:unit && npm run test:integration && npm run test:e2e",
 		"test:unit": "node test/run.mjs unit",
-		"test:typecheck": "tsc --noEmit -p test/tsconfig.json",
-		"test:integration": "node test/run.mjs integration"
+		"test:integration": "node test/run.mjs integration",
+		"test:build": "node test/build-plugin.mjs",
+		"test:e2e": "npm run test:build && wdio run ./wdio.conf.mts",
+		"test:typecheck": "tsc --noEmit -p test/tsconfig.json"
 	},
 	"keywords": [
 		"obsidian",
@@ -35,13 +37,20 @@
 		"@types/sinonjs__fake-timers": "^15.0.1",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
+		"@wdio/cli": "^9.31.5",
+		"@wdio/globals": "^9.31.3",
+		"@wdio/local-runner": "^9.31.5",
+		"@wdio/mocha-framework": "^9.31.5",
 		"esbuild": "^0.25.2",
 		"esbuild-plugin-svgr": "^3.1.1",
 		"husky": "^9.1.7",
 		"mocha": "^10.8.2",
 		"obsidian": "^1.13.1",
 		"tslib": "2.4.0",
-		"typescript": "~5.9"
+		"tsx": "^4.23.13",
+		"typescript": "~5.9",
+		"wdio-obsidian-reporter": "^3.2.0",
+		"wdio-obsidian-service": "^3.2.0"
 	},
 	"dependencies": {
 		"@codemirror/highlight": "^0.19.8",

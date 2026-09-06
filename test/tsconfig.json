@@ -15,12 +15,16 @@
     "noEmit": true,
     "types": [
       "node",
-      "mocha"
+      "mocha",
+      "@wdio/globals/types",
+      "@wdio/mocha-framework",
+      "wdio-obsidian-service"
     ],
     "useDefineForClassFields": false
   },
   "include": [
     "./**/*.ts",
+    "../wdio.conf.mts",
     "../src/types/*.d.ts"
   ]
 }
