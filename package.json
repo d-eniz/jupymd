@@ -9,9 +9,10 @@
 		"watch": "tsc -w -p .",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"prepare": "husky",
-		"test": "npm run test:typecheck && npm run test:unit",
+		"test": "npm run test:typecheck && npm run test:unit && npm run test:integration",
 		"test:unit": "node test/run.mjs unit",
-		"test:typecheck": "tsc --noEmit -p test/tsconfig.json"
+		"test:typecheck": "tsc --noEmit -p test/tsconfig.json",
+		"test:integration": "node test/run.mjs integration"
 	},
 	"keywords": [
 		"obsidian",
