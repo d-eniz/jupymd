@@ -2,22 +2,25 @@ import {strict as assert} from 'node:assert';
 import {beforeEach,afterEach,describe,it} from 'mocha';
 import {freshVault,openNote,seedPair,command,chooseKernel,runCell,expectOutput,notebook,browser,$,expect,obsidianPage} from '../support/obsidian';
 import {testPython} from '../support/environment';
+import {openPluginSettings,returnToMainWindow,switchToWindowWith} from '../support/obsidian';
 
 async function openToolingSelector() {
-    await browser.executeObsidian(({app})=>{(app as any).setting.open();(app as any).setting.openTabById('jupymd');});
-    await $('.vertical-tab-content').$('button=Select environment').click();
-    await $('input[placeholder="Select a Python environment or type a custom path…"]').waitForDisplayed();
+    await openPluginSettings();
+    await $('button=Select environment').click();
+    await switchToWindowWith('input[placeholder="Select a Python environment or type a custom path…"]');
 }
 describe('Setup and kernel lifecycle',()=>{
     beforeEach(async()=>{await freshVault();});
-    afterEach(async()=>{await browser.executeObsidian(async({plugins})=>{await plugins.jupymd?.executor.cleanup();});});
+    afterEach(async()=>{await returnToMainWindow();await browser.executeObsidian(async({plugins})=>{await plugins.jupymd?.executor.cleanup();});});
     it('rejects an invalid custom tooling interpreter and preserves settings',async()=>{
         await openToolingSelector();
         const input=await $('input[placeholder="Select a Python environment or type a custom path…"]');
         await input.setValue('/does-not-exist/jupymd-python');
         await $('.suggestion-item*=Use custom path').waitForDisplayed();
         await $('.suggestion-item*=Use custom path').click();
+        await switchToWindowWith('.notice*=Invalid Python path');
         await expect($('.notice-container')).toHaveText(expect.stringContaining('Invalid Python path'));
+        await returnToMainWindow();
         assert.equal(await browser.executeObsidian(({plugins})=>plugins.jupymd.settings.toolingPython),testPython('tooling'));
     });
     it('cancels tooling installation without changing the selected interpreter',async()=>{
@@ -26,8 +29,10 @@ describe('Setup and kernel lifecycle',()=>{
         await input.setValue(testPython('kernel'));
         await $('.suggestion-item*=Use custom path').waitForDisplayed();
         await $('.suggestion-item*=Use custom path').click();
+        await switchToWindowWith('.modal-title=Install required Jupyter tooling');
         await $('.modal-title=Install required Jupyter tooling').waitForDisplayed();
         await $('button=Cancel').click();
+        await returnToMainWindow();
         assert.equal(await browser.executeObsidian(({plugins})=>plugins.jupymd.settings.toolingPython),testPython('tooling'));
     });
     it('recovers from an unavailable saved kernel by selecting an installed kernel',async()=>{

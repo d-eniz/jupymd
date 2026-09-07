@@ -4,8 +4,11 @@ import {join} from 'node:path';
 import {writeFile, mkdir, readFile} from 'node:fs/promises';
 import {testPython,installKernel} from './environment';
 
+let mainWindow: string;
+
 export async function freshVault(settings: Record<string,unknown>={}) {
     await browser.reloadObsidian({vault:'test/fixtures/vault',plugins:[]});
+    mainWindow = await browser.getWindowHandle();
     const vault=obsidianPage.getVaultPath();
     const configDir=await obsidianPage.getConfigDir();
     const dataDir=join(vault,configDir,'jupymd','jupyter');
@@ -47,6 +50,29 @@ export async function openNote(path: string,content?: string, mode:'preview'|'so
 }
 export async function command(id:string) {
     await browser.executeObsidianCommand(`jupymd:${id}`);
+}
+export async function returnToMainWindow() {
+    // Reloading Obsidian can replace its window handle.
+    const handles = await browser.getWindowHandles();
+    if (handles.includes(mainWindow)) await browser.switchToWindow(mainWindow);
+}
+export async function switchToWindowWith(selector: string) {
+    await browser.waitUntil(async () => {
+        for (const handle of await browser.getWindowHandles()) {
+            await browser.switchToWindow(handle);
+            if (await $(selector).isDisplayed()) return true;
+        }
+        return false;
+    }, {timeoutMsg: `No Obsidian window displays ${selector}`});
+}
+export async function openPluginSettings() {
+    await returnToMainWindow();
+    await browser.executeObsidian(async ({app}) => {
+        await (app as any).setting.open();
+        await (app as any).setting.openTabById('jupymd');
+    });
+    // Obsidian 1.13+ opens settings in a separate window by default.
+    await switchToWindowWith('button=Select environment');
 }
 export async function chooseKernel() {
     await $('input[placeholder="Select a kernel source…"]').waitForDisplayed();

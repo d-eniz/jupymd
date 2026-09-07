@@ -1,10 +1,11 @@
 import {strict as assert} from 'node:assert';
 import {beforeEach,afterEach,describe,it} from 'mocha';
 import {freshVault,openNote,note,pair,seedPair,command,runCell,expectOutput,notebook,cells,waitForCounts,browser,$,$$,expect,obsidianPage} from '../support/obsidian';
+import {openPluginSettings,returnToMainWindow} from '../support/obsidian';
 
 describe('Vault lifecycle and settings',()=>{
     beforeEach(async()=>{await freshVault();});
-    afterEach(async()=>{await browser.executeObsidian(async({plugins})=>{await plugins.jupymd?.executor.cleanup();});});
+    afterEach(async()=>{await returnToMainWindow();await browser.executeObsidian(async({plugins})=>{await plugins.jupymd?.executor.cleanup();});});
     it('moves the paired notebook and executes and clears using the new path (#41)',async()=>{
         await openNote('move.md',note(['print(42)'])); await pair('move.md');
         await obsidianPage.mkdir('folder');
@@ -51,9 +52,10 @@ describe('Vault lifecycle and settings',()=>{
         await assert.rejects(notebook('ordinary.md'),/ENOENT/);
     });
     it('persists a settings toggle through reload',async()=>{
-        await browser.executeObsidian(({app})=>{(app as any).setting.open();(app as any).setting.openTabById('jupymd');});
-        const setting=await $('.vertical-tab-content').$('.setting-item*=Automatic sync');
+        await openPluginSettings();
+        const setting=await $('.setting-item*=Automatic sync');
         await setting.waitForDisplayed(); await setting.$('.checkbox-container').click();
+        await returnToMainWindow();
         await browser.waitUntil(()=>browser.executeObsidian(({plugins})=>plugins.jupymd.settings.autoSync===true));
         await browser.reloadObsidian({plugins:['jupymd']});
         assert.equal(await browser.executeObsidian(({plugins})=>plugins.jupymd.settings.autoSync),true);
