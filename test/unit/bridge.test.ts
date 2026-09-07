@@ -34,10 +34,12 @@ describe('Bridge transport failures and framing', () => {
         client = new JupyterBridgeClient('test-python', '/test/kernels');
     });
     afterEach(async () => {
-        await client.dispose();
-        require('child_process').spawn = originalSpawn;
-        console.error = originalError;
-        clock.uninstall();
+        try {await client.dispose();}
+        finally {
+            require('child_process').spawn = originalSpawn;
+            console.error = originalError;
+            clock.uninstall();
+        }
     });
     function reply(id: number, result: unknown) {
         processDouble.stdout.emit('data', JSON.stringify({id,ok:true,result})+'\n');

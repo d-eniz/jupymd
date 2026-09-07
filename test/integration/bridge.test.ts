@@ -1,5 +1,5 @@
 import {strict as assert} from 'node:assert';
-import {before, after, afterEach, describe, it} from 'mocha';
+import {beforeEach, afterEach, describe, it} from 'mocha';
 import {JupyterBridgeClient} from '../../src/bridge/JupyterBridgeClient';
 import {workspace, testPython, installKernel, join, readFile, rm, preserveFailure} from '../support/environment';
 import type {KernelExecutionResult} from '../../src/kernels/types';
@@ -18,15 +18,19 @@ async function waitForFile(path: string) {
 describe('Real Jupyter bridge', function () {
     let directory: string, bridge: JupyterBridgeClient, kernel: string;
     const execute = (code: string, session = 'notebook') => bridge.execute(session,kernel,directory,code,20);
-    before(async () => {
+    beforeEach(async () => {
         directory = await workspace();
         kernel = await installKernel(join(directory,'jupyter'));
         bridge = new JupyterBridgeClient(testPython('tooling'),join(directory,'jupyter'));
     });
     afterEach(async function () {
-        if (this.currentTest?.state === 'failed') await preserveFailure(directory,this.currentTest.fullTitle());
+        try {
+            if (this.currentTest?.state === 'failed') await preserveFailure(directory,this.currentTest.fullTitle());
+        } finally {
+            try {await bridge?.dispose();}
+            finally {if(directory) await rm(directory,{recursive:true,force:true});}
+        }
     });
-    after(async () => {await bridge?.dispose(); if(directory) await rm(directory,{recursive:true,force:true});});
     it('discovers an external kernelspec and uses its separate interpreter (#51)', async () => {
         const found = (await bridge.listKernels()).find(k => k.name===kernel);
         assert.ok(found); assert.equal(found.language,'python');
