@@ -47,7 +47,8 @@ describe('Setup and kernel lifecycle',()=>{
         await runCell(1); await expectOutput(1,'False');
     });
     it('interrupts running code through its command and restores the Run control',async()=>{
-        await seedPair('interrupt.md',["from pathlib import Path\nimport time\nPath('started.txt').touch()\ntime.sleep(60)"]);
+        // Short sleeps allow Windows IPykernel to deliver its deferred interrupt.
+        await seedPair('interrupt.md',["from pathlib import Path\nimport time\nPath('started.txt').touch()\nwhile True:\n    time.sleep(0.05)"]);
         await openNote('interrupt.md'); await runCell(0);
         await browser.waitUntil(()=>browser.executeObsidian(({app})=>app.vault.adapter.exists('started.txt')));
         await command('interrupt-notebook-kernel');

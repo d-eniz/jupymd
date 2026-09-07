@@ -80,7 +80,9 @@ describe('Real Jupyter bridge', function () {
         });
     }
     it('interrupts running work and accepts another execution', async () => {
-        const pending = execute("from pathlib import Path\nimport time\nPath('started').touch()\ntime.sleep(60)");
+        // Windows IPykernel defers KeyboardInterrupt until Python resumes after a sleep.
+        const pending = execute("from pathlib import Path\nimport time\nPath('started').touch()\nwhile True:\n    time.sleep(0.05)");
+        void pending.catch(() => {}); // Keep cleanup rejections handled if readiness/interrupt fails first.
         await waitForFile(join(directory,'started'));
         assert.equal(await bridge.interrupt('notebook'),true);
         assert.ok((await pending).outputs.some(o => o.output_type==='error' && o.ename==='KeyboardInterrupt'));
