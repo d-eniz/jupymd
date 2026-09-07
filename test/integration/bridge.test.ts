@@ -1,5 +1,6 @@
 import {strict as assert} from 'node:assert';
 import {beforeEach, afterEach, describe, it} from 'mocha';
+import {EOL} from 'node:os';
 import {JupyterBridgeClient} from '../../src/bridge/JupyterBridgeClient';
 import {workspace, testPython, installKernel, join, readFile, rm, preserveFailure} from '../support/environment';
 import type {KernelExecutionResult} from '../../src/kernels/types';
@@ -45,7 +46,7 @@ describe('Real Jupyter bridge', function () {
     it('uses the note directory for relative file reads and writes (#27)', async () => {
         const result = await execute("from pathlib import Path\nPath('relative.csv').write_text('a,b\\n1,2\\n')\nprint(Path('relative.csv').read_text(), end='')");
         assert.equal(text(result),'a,b\n1,2\n');
-        assert.equal(await readFile(join(directory,'relative.csv'),'utf8'),'a,b\n1,2\n');
+        assert.equal(await readFile(join(directory,'relative.csv'),'utf8'),`a,b${EOL}1,2${EOL}`);
     });
     it('preserves Unicode across stdout, stderr and execution results (#39, #50)', async () => {
         const expected = 'é 漢字 🧪 e\u0301';

@@ -1,5 +1,6 @@
 import {strict as assert} from 'node:assert';
 import {execFileSync} from 'node:child_process';
+import {realpath} from 'node:fs/promises';
 import {beforeEach,afterEach,describe,it} from 'mocha';
 import {runQuickSetup} from '../../src/utils/quickSetup';
 import {validatePythonPath} from '../../src/utils/pythonPathUtils';
@@ -25,6 +26,6 @@ describe('Python environment setup',()=>{
         assert.equal(python,expected);
         assert.ok((await readFile(join(directory,'.test environment','pyvenv.cfg'),'utf8')).includes('include-system-site-packages = false'));
         const prefix=execFileSync(python!,['-c','import sys; print(sys.prefix)'],{encoding:'utf8'}).trim();
-        assert.equal(prefix,join(directory,'.test environment'));
+        assert.equal(await realpath(prefix),await realpath(join(directory,'.test environment')));
     });
 });
