@@ -31,12 +31,12 @@ npm run test:unit -- --grep 'fragmented'
 npm run test:e2e -- --spec test/e2e/indexing.e2e.ts
 ```
 
-Desktop tests default to Obsidian app/installer `1.8.4/1.8.4`. Override with:
+Desktop tests default to the latest Obsidian app and installer. CI tests latest on Linux, Windows and macOS, plus 1.8.4 on Linux. To check 1.8.4 locally:
 
 ```sh
-OBSIDIAN_VERSIONS='latest/latest' npm run test:e2e
+OBSIDIAN_VERSIONS='1.8.4/1.8.4' npm run test:e2e
 ```
 
-In PowerShell, set `$env:OBSIDIAN_VERSIONS = 'latest/latest'` first.
+In PowerShell, set `$env:OBSIDIAN_VERSIONS = '1.8.4/1.8.4'` first.
 
 Failure artifacts are saved under `test-results/`; integration failures preserve their temporary workspace.

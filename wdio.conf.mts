@@ -3,8 +3,7 @@ import {mkdir, writeFile, cp} from 'node:fs/promises';
 import {browser} from '@wdio/globals';
 import {obsidianPage} from 'wdio-obsidian-service';
 
-// Keep the default reproducible. Compatibility CI supplies earliest/earliest and latest/latest.
-const versions = (process.env.OBSIDIAN_VERSIONS || '1.8.4/1.8.4').split(/\s+/);
+const versions = (process.env.OBSIDIAN_VERSIONS || 'latest/latest').split(/\s+/);
 export const config: WebdriverIO.Config = {
     runner:'local', framework:'mocha', specs:['./test/e2e/**/*.e2e.ts'],
     maxInstances:1,

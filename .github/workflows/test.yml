@@ -18,13 +18,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            obsidian: 1.8.4/1.8.4
-          - os: windows-latest
-            obsidian: 1.8.4/1.8.4
-          - os: macos-latest
-            obsidian: 1.8.4/1.8.4
-          - os: ubuntu-latest
             obsidian: latest/latest
+          - os: windows-latest
+            obsidian: latest/latest
+          - os: macos-latest
+            obsidian: latest/latest
+          - os: ubuntu-latest
+            obsidian: 1.8.4/1.8.4
     runs-on: ${{ matrix.os }}
     defaults:
       run:
