@@ -344,7 +344,7 @@ export const NotebookCodeBlock: React.FC<NotebookCodeBlockProps> = ({
 
 	useEffect(() => {
 		if (executionEnabled) void renderOutputs();
-	}, [path, currentIndex, executionEnabled]);
+	}, [path, currentIndex, executionEnabled, isPaired]);
 
 	useEffect(() => {
 		if (!executionEnabled) return;

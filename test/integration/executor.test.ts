@@ -12,14 +12,14 @@ import {workspace,testPython,installKernel,join,readFile,writeFile,rm,preserveFa
 
 describe('Executor with real notebooks and kernels',()=>{
     let directory:string, path:string, ipynb:string, executor:CodeExecutor, service:NotebookKernelService;
-    let plugin:any;
+    let plugin:any, app:any;
     const markdown=(codes:string[])=>'# Notes\n\n'+codes.map(c=>'```python\n'+c+'\n```').join('\n\n')+'\n';
     const notebook=async()=>JSON.parse(await readFile(ipynb,'utf8'));
     beforeEach(async()=>{
         directory=await workspace(); path=join(directory,'note.md'); ipynb=join(directory,'note.ipynb');
         const vault={adapter:new FileSystemAdapter(directory), configDir:'.obsidian'};
         const file=new TFile('note.md',vault);
-        const app:any={vault,workspace:{getActiveFile:()=>file},metadataCache:{getFileCache:()=>({frontmatter:{jupyter:{}}})}};
+        app={vault,workspace:{getActiveFile:()=>file},metadataCache:{getFileCache:()=>({frontmatter:{jupyter:{}}})}};
         const store=new ManagedKernelSpecStore(app,'jupymd');
         const kernel=await installKernel(store.jupyterDataDir);
         service=new NotebookKernelService(new JupyterBridgeClient(testPython('tooling'),store.jupyterDataDir),store);
@@ -50,6 +50,15 @@ describe('Executor with real notebooks and kernels',()=>{
         assert.equal(code[1].outputs[0].text.join(''),'99\n');
         assert.ok((await readFile(path,'utf8')).includes('print(99)'));
         assert.equal(code[0].execution_count,null);
+    });
+    it('executes after successful pairing while the metadata cache is still stale',async()=>{
+        app.metadataCache.getFileCache=()=>({});
+        let creations=0;
+        // The paired files exist, but Obsidian has not indexed Jupytext's frontmatter yet.
+        plugin.createNotebookWithKernel=async()=>{creations++;return true;};
+        await executor.executeCodeBlock({code:'value = 10',cellIndex:0,language:'python'});
+        assert.equal(creations,1);
+        assert.equal((await notebook()).cells.filter((c:any)=>c.cell_type==='code')[0].execution_count,1);
     });
     it('rejects a stale index instead of attaching output to a different source',async()=>{
         await assert.rejects(executor.executeCodeBlock({code:'print(999)',cellIndex:1,language:'python'}),/does not match/);

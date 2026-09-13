@@ -29,6 +29,25 @@ describe('Rendering and Obsidian contexts',()=>{
         await expectOutput(3,'"answer": 42'); await expectOutput(4,'plain text');
         await expect((await cells())[0].$('.code-output')).not.toHaveText(expect.stringContaining('fallback hidden'));
     });
+    it('loads saved output when pairing metadata arrives after the widget mounts',async()=>{
+        await seedPair('delayed.md',['print(42)'],[stream('42\n')]);
+        await browser.executeObsidian(({app})=>{
+            const cache=app.metadataCache;
+            const original=cache.getFileCache.bind(cache);
+            // Hold back pairing metadata to reproduce a slow startup/file watcher.
+            cache.getFileCache=file=>file.path==='delayed.md'
+                ? {...original(file),frontmatter:undefined} : original(file);
+            (globalThis as any).__releasePairingMetadata=async()=>{
+                cache.getFileCache=original;
+                const file=app.vault.getFileByPath('delayed.md')!;
+                cache.trigger('changed',file,await app.vault.read(file),original(file));
+            };
+        });
+        await openNote('delayed.md');
+        await expect((await cells())[0].$('[aria-label="Clear output"]')).toBeDisabled();
+        await browser.executeObsidian(async()=>{await (globalThis as any).__releasePairingMetadata();});
+        await expectOutput(0,'42');
+    });
     it('sanitizes active HTML while retaining supported output content',async()=>{
         await seedPair('html.md',['pass'],[[{output_type:'display_data',metadata:{},data:{'text/html':'<b>safe text</b><script>window.__unsafeOutput=true</script><img src="invalid:" onerror="window.__unsafeOutput=true">'}}]]);
         await openNote('html.md'); await expectOutput(0,'safe text');
