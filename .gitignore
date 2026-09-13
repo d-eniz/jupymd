@@ -23,3 +23,9 @@ data.json
 
 # Astro
 .astro
+# Disposable automated test environments, builds and diagnostics
+.test-env/
+.test-build/
+.obsidian-cache/
+test-results/
+__pycache__/

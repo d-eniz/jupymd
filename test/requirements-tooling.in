@@ -1,0 +1,3 @@
+jupytext==1.19.5
+jupyter-client==8.10.0
+nbformat==5.11.1

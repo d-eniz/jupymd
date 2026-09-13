@@ -42,3 +42,7 @@ It is a good idea to have a general understanding of the project workflow and th
 It is important that we keep the codebase tidy and easy to understand. Not only does this make it easier for new contributors to learn the codebase, it also makes maintenance and spotting problems easier.
 
 If you choose to use AI, make sure the generated code makes sense within the context of the general codebase.
+
+### Automated tests
+
+See [test/README.md](test/README.md) for setup and test commands.

@@ -14,7 +14,13 @@ on:
           - major
 
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+
   release:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -26,12 +32,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.ref_name }}
+          ref: ${{ github.sha }}
 
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18.x"
+          node-version: "22.x"
           cache: npm
 
       - name: Install dependencies
@@ -81,7 +87,7 @@ jobs:
           git add package.json package-lock.json manifest.json versions.json
           git commit -m "chore(release): ${VERSION}"
           git tag "${VERSION}"
-          git push origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"
           git push origin "${VERSION}"
 
       - name: Prepare release notes

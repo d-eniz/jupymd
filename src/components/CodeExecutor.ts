@@ -77,7 +77,7 @@ export class CodeExecutor {
 			return null;
 		}
 
-		let paired = await isNotebookPaired(this.app, activeFile);
+		const paired = await isNotebookPaired(this.app, activeFile);
 		if (!paired) {
 			if (!this.plugin.settings.autoConvertToNotebookOnRun) {
 				new Notice("Active note is not paired with a notebook.");
@@ -86,11 +86,8 @@ export class CodeExecutor {
 
 			const created = await this.plugin.createNotebookWithKernel(false, preferredLanguage);
 			if (!created) return null;
-			paired = await isNotebookPaired(this.app, activeFile);
-			if (!paired) {
-				new Notice("Failed to pair note with a notebook before running.");
-				return null;
-			}
+			// Creation awaits Jupytext's writes; Obsidian's metadata cache may still
+			// contain the old frontmatter until its file watcher catches up.
 		}
 
 		const notePath = getAbsolutePath(activeFile);

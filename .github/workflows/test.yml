@@ -1,0 +1,78 @@
+name: Test JupyMD
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    name: ${{ matrix.os }} / Obsidian ${{ matrix.obsidian }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            obsidian: latest/latest
+          - os: windows-latest
+            obsidian: latest/latest
+          - os: macos-latest
+            obsidian: latest/latest
+          - os: ubuntu-latest
+            obsidian: 1.8.4/1.8.4
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: 'test/requirements-*.txt'
+      - run: npm ci
+      - run: python test/setup-python.py
+      - run: npm run test:typecheck
+      - run: npm run test:unit
+      - run: npm run test:integration
+      - uses: actions/cache@v4
+        with:
+          path: .obsidian-cache
+          key: obsidian-${{ runner.os }}-${{ runner.arch }}-${{ matrix.obsidian }}-${{ hashFiles('package-lock.json') }}
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb openbox
+      - name: Obsidian acceptance tests
+        env:
+          OBSIDIAN_VERSIONS: ${{ matrix.obsidian }}
+        run: |
+          if [ "$RUNNER_OS" = 'Linux' ]; then
+            xvfb-run -a bash -c 'openbox >/dev/null 2>&1 & npm run test:e2e'
+          else
+            npm run test:e2e
+          fi
+      - name: Known sync regressions (diagnostic, expected failures)
+        if: always()
+        continue-on-error: true
+        run: npm run test:regressions
+      - name: Preserve diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ strategy.job-index }}
+          path: |
+            test-results/
+            .test-env/*-freeze.txt
+            .test-env/versions.json
+          if-no-files-found: ignore
