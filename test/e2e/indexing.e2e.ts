@@ -10,6 +10,7 @@ describe('Editing notebook cells',()=>{
         await openNote('editing.md',undefined,'source');
         await browser.executeObsidian(({app})=>{app.workspace.activeEditor?.editor?.setCursor({line:0,ch:0});});
         await expect($('.workspace-leaf.mod-active .view-content > :not([style*="display: none"]) [aria-label="Run cell"]')).toExist();
+        await cells(2);
         await browser.execute(()=>{
             const target=document.querySelectorAll('.workspace-leaf.mod-active .view-content > :not([style*="display: none"]) .code-container')[1];
             if(!target) throw new Error('Target cell missing');

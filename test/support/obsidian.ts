@@ -99,19 +99,33 @@ export async function pair(path:string) {
 export async function notebook(path:string) {
     return JSON.parse(await readFile(join(obsidianPage.getVaultPath(),path.replace(/\.md$/,'.ipynb')),'utf8'));
 }
-export async function cells() {
-    await browser.waitUntil(async()=> (await $$('.workspace-leaf.mod-active .view-content > :not([style*="display: none"]) .code-container').getElements()).length>0);
-    return $$('.workspace-leaf.mod-active .view-content > :not([style*="display: none"]) .code-container').getElements();
+async function renderedCells() {
+    const elements=await browser.execute(()=>{
+        const view='.workspace-leaf.mod-active .view-content > :not([style*="display: none"])';
+        // Processors mount asynchronously: a later cell can appear before an earlier one.
+        const blocks=Array.from(document.querySelectorAll(`${view} [class*="block-language-"]`));
+        if(blocks.some(block=>!block.querySelector('code'))) return [];
+        return Array.from(document.querySelectorAll<HTMLElement>(`${view} .code-container`));
+    });
+    return $$(elements).getElements();
+}
+export async function cells(minimum=1) {
+    let current=await renderedCells();
+    await browser.waitUntil(async()=>{
+        current=await renderedCells();
+        return current.length>=minimum;
+    },{timeoutMsg:`Expected at least ${minimum} rendered cells`});
+    return current;
 }
 export async function runCell(index:number) {
-    const cell=(await cells())[index];
+    const cell=(await cells(index+1))[index];
     const button=await cell.$('[aria-label="Run cell"]');
     await button.waitForEnabled(); await button.click();
 }
 export async function expectOutput(index:number,text:string) {
     // Resolve the cell again while waiting: Obsidian can replace widgets after metadata updates.
     await browser.waitUntil(async()=>{
-        const current=await $$('.workspace-leaf.mod-active .view-content > :not([style*="display: none"]) .code-container').getElements();
+        const current=await renderedCells();
         if(!current[index]) return false;
         const output=await current[index].$('.code-output');
         return await output.isExisting() && (await output.getText()).includes(text);

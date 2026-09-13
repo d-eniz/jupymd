@@ -45,12 +45,12 @@ describe('Notebook user journeys',()=>{
     it('runs above and cell-and-below using the cell menu',async()=>{
         await openNote('ranges.md',note(['value = 10','print(value + 1)','print(value + 2)']));
         await pair('ranges.md');
-        await (await cells())[1].$('[aria-label="More run actions"]').waitForEnabled();
-        await (await cells())[1].$('[aria-label="More run actions"]').click();
+        await (await cells(2))[1].$('[aria-label="More run actions"]').waitForEnabled();
+        await (await cells(2))[1].$('[aria-label="More run actions"]').click();
         await $('[role="menuitem"][aria-label="Run above"]').click();
         await waitForCounts('ranges.md',[1,null,null]);
-        await (await cells())[1].$('[aria-label="More run actions"]').waitForEnabled();
-        await (await cells())[1].$('[aria-label="More run actions"]').click();
+        await (await cells(2))[1].$('[aria-label="More run actions"]').waitForEnabled();
+        await (await cells(2))[1].$('[aria-label="More run actions"]').click();
         await $('[role="menuitem"][aria-label="Run below"]').waitForDisplayed();
         await $('[role="menuitem"][aria-label="Run below"]').click();
         await waitForCounts('ranges.md',[1,2,3]); await expectOutput(2,'12');
