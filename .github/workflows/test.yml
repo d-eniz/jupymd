@@ -1,6 +1,5 @@
 name: Test JupyMD
 on:
-  push:
   pull_request:
   workflow_dispatch:
   workflow_call:
