@@ -21,13 +21,13 @@ With JupyMD you can:
 
 ## Use-cases:
 
-### Machine learning workflow
+### Data analysis and modelling
 
-![ml-workflow](assets/example-ml-workflow.gif)
+![notebook-showcase](assets/notebook-showcase.gif)
 
-### Visualising fractals with `matplotlib`
+### Visualising wave interference
 
-![mandelbrot-set](assets/mandelbrot-set.png)
+![wave-interference-typecript](assets/wave-interference-typescript.png)
 
 ## Features
 
